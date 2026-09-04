@@ -1,0 +1,36 @@
+# Build outputs
+/src-tauri/target/
+/dist/
+/dist-portable/
+/runtime/
+/.build-cache/
+
+# Local tool/cache state
+/.cargo/
+/.hallmark/
+
+# Runtime service roots
+/ftp_root/
+/tftp_root/
+
+# Reverse-engineering and UI automation artifacts that are not needed to build
+/analysis/original-extracted/
+/analysis/openreverse/
+/analysis/pretty/
+/analysis/*.png
+
+# Large/generated binaries and debug symbols
+*.exe
+*.dll
+*.pdb
+*.lib
+*.rlib
+*.rmeta
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+Thumbs.db
+.DS_Store

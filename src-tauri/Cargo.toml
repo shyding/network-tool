@@ -1,0 +1,32 @@
+[package]
+name = "network-toolbox-rebuild"
+version = "9.0.0"
+description = "网络测试工具箱 V9.0 独立重实现"
+authors = ["rebuild"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["process", "time", "net", "sync", "rt-multi-thread", "macros", "io-util"] }
+local-ip-address = "0.6"
+sysinfo = "0.30"
+socket2 = "0.5"
+dns-lookup = "2"
+ipnet = "2"
+serialport = "4"
+ssh2 = "0.9"
+base64 = "0.22"
+encoding_rs = "0.8"
+sha2 = "0.10"
+md5 = "0.7"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

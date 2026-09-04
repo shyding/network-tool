@@ -1,0 +1,322 @@
+{
+  "AboutView-DJsbRVCe.js": [
+    "app_info",
+    "get_elevation_status"
+  ],
+  "AiAssistantView-BAiTmzAG.js": [
+    "ai_chat",
+    "skill_execute",
+    "skill_list",
+    "skill_prompt"
+  ],
+  "CameraScanView-18gwz4-y.js": [
+    "camera_build_rtsp_url",
+    "camera_change_password",
+    "camera_get_device_info",
+    "camera_get_snapshot",
+    "camera_inspect_firmware",
+    "camera_probe_auth",
+    "camera_start_batch_upgrade",
+    "camera_start_live_stream",
+    "camera_stop_batch_upgrade",
+    "camera_stop_live_stream",
+    "list_camera_vendors",
+    "list_segment_ifaces",
+    "start_camera_scan",
+    "stop_camera_scan",
+    "write_text_file"
+  ],
+  "ConnTestView-C_7Wewts.js": [
+    "run_chain_conn_test",
+    "run_site_conn_test",
+    "tools_conn_stats",
+    "tools_conn_stats_detail",
+    "tools_dns_hijack",
+    "tools_dns_lookup",
+    "tools_dns_prefer",
+    "tools_mtu_test",
+    "tools_nslookup",
+    "tools_port_process",
+    "tools_ssl_check",
+    "tools_telnet_test"
+  ],
+  "DhcpDetectView-CLoeN9SQ.js": [
+    "get_elevation_status",
+    "list_dhcp_ifaces",
+    "relaunch_as_admin",
+    "start_dhcp_detect"
+  ],
+  "FirewallView-B5Jv3mdn.js": [
+    "firewall_add_port_rule",
+    "firewall_delete_rule",
+    "firewall_set_all",
+    "firewall_set_profile",
+    "firewall_set_rule_enabled",
+    "firewall_snapshot",
+    "relaunch_as_admin"
+  ],
+  "HealthCheckView-DvYBsNta.js": [
+    "list_loop_interfaces",
+    "start_health_check",
+    "start_loop_detection"
+  ],
+  "HostDiscoveryView-DfSQsn3D.js": [
+    "list_segment_ifaces",
+    "send_wake_on_lan",
+    "start_host_discovery",
+    "stop_host_discovery"
+  ],
+  "IpConflictView-CMq5rhiO.js": [
+    "list_conflict_ifaces",
+    "start_ip_conflict",
+    "stop_ip_conflict"
+  ],
+  "IpInfoView-CJSSaJT4.js": [
+    "get_local_ip_info",
+    "get_public_ip_info",
+    "query_ip_info"
+  ],
+  "LanSpeedView-BuWLXOnX.js": [
+    "check_iperf3",
+    "list_lan_ifaces",
+    "start_lan_server",
+    "start_lan_speed_test",
+    "stop_lan_server",
+    "stop_lan_speed_test"
+  ],
+  "LinkMonitorView-DyZKxtLL.js": [
+    "link_monitor_running",
+    "send_feishu_webhook",
+    "send_wecom_webhook",
+    "start_link_monitor",
+    "stop_link_monitor",
+    "write_text_file"
+  ],
+  "LldpView-BZMMAlIC.js": [
+    "get_elevation_status",
+    "list_lldp_ifaces",
+    "list_lldp_neighbors",
+    "lldp_status",
+    "relaunch_as_admin",
+    "start_lldp_scan",
+    "stop_lldp_scan"
+  ],
+  "LocalSettingsView-CGNr_1Dz.js": [
+    "local_apply_ip_config",
+    "local_get_ip_config",
+    "local_list_ip_ifaces",
+    "local_open_tool",
+    "local_run_action",
+    "local_run_repair",
+    "local_settings_snapshot",
+    "relaunch_as_admin"
+  ],
+  "LogAuditView-BWhJhiUc.js": [
+    "start_log_audit"
+  ],
+  "MacLookupView-DiGzOJ7d.js": [
+    "convert_mac_format",
+    "list_arp_table",
+    "lookup_mac_vendor"
+  ],
+  "NetServicesView-C6LD9HQs.js": [
+    "net_svc_smoke_test",
+    "net_svc_start_dhcp",
+    "net_svc_start_ftp",
+    "net_svc_start_http",
+    "net_svc_start_radius",
+    "net_svc_start_syslog",
+    "net_svc_start_tftp",
+    "net_svc_status",
+    "net_svc_stop_dhcp",
+    "net_svc_stop_ftp",
+    "net_svc_stop_http",
+    "net_svc_stop_radius",
+    "net_svc_stop_syslog",
+    "net_svc_stop_tftp"
+  ],
+  "PacketCaptureView-D09XCcto.js": [
+    "ai_analyze_packet_capture",
+    "capture_status",
+    "clear_packet_capture",
+    "export_packet_capture",
+    "get_elevation_status",
+    "import_packet_capture",
+    "list_capture_ifaces",
+    "relaunch_as_admin",
+    "start_packet_capture",
+    "stop_packet_capture"
+  ],
+  "PingView-CU5BaB_p.js": [
+    "list_segment_ifaces",
+    "start_batch_ping",
+    "start_continuous_ping",
+    "start_ping_once",
+    "start_segment_ping",
+    "start_tcp_ping",
+    "stop_ping"
+  ],
+  "PortScanView-DB_nfGET.js": [
+    "start_port_scan",
+    "stop_port_scan"
+  ],
+  "ProtocolAnalyzeView-CGjTGtwV.js": [
+    "list_capture_ifaces",
+    "protocol_analyze_live",
+    "protocol_analyze_snapshot"
+  ],
+  "RdpView-CWCPg5ss.js": [
+    "launch_rdp"
+  ],
+  "RemoteTerminalView-XCM0-W3p.js": [
+    "term_session_close",
+    "term_session_close_all",
+    "term_session_ssh_open",
+    "term_session_telnet_open",
+    "term_session_write"
+  ],
+  "RouteTableView-ByQNgZ0i.js": [
+    "add_route",
+    "delete_route",
+    "list_route_table"
+  ],
+  "SecurityTestView-B2CFUoH3.js": [
+    "start_security_test"
+  ],
+  "SerialView-CaiUwAdE.js": [
+    "serial_close",
+    "serial_list_ports",
+    "serial_open",
+    "serial_write"
+  ],
+  "SessionTestView-D_wGgjZy.js": [
+    "start_session_test",
+    "stop_session_test"
+  ],
+  "SettingsView-B4QFY_YN.js": [
+    "app_info",
+    "get_elevation_status",
+    "relaunch_as_admin"
+  ],
+  "SpeedTestView-DECjiZwD.js": [
+    "start_speed_test",
+    "stop_speed_test"
+  ],
+  "SubnetCalcView-BTWQtDZZ.js": [
+    "calc_subnet_ipv4",
+    "calc_subnet_ipv6",
+    "calc_vlsm",
+    "calc_wildcard_mask",
+    "split_subnets",
+    "summarize_routes"
+  ],
+  "TracertView-iKFmwbKm.js": [
+    "start_tracert",
+    "stop_tracert"
+  ],
+  "TrafficMonitorView-5gSYrBJv.js": [
+    "list_traffic_ifaces",
+    "reset_traffic_baseline",
+    "sample_traffic"
+  ],
+  "WifiAnalyzeView-D_ud2CKN.js": [
+    "list_wifi_interfaces",
+    "scan_wifi_networks"
+  ],
+  "WifiPasswordView-Bgexd9_u.js": [
+    "list_wifi_passwords"
+  ],
+  "WorkbenchView-CpfGwIVn.js": [
+    "get_dashboard_connectivity",
+    "get_dashboard_snapshot"
+  ],
+  "index-DNL4tSY9.js": [
+    "license_activate",
+    "license_deactivate",
+    "license_import",
+    "license_status",
+    "license_verify",
+    "plugin:event|emit",
+    "plugin:event|emit_to",
+    "plugin:event|listen",
+    "plugin:event|unlisten",
+    "plugin:image|from_bytes",
+    "plugin:image|from_path",
+    "plugin:image|new",
+    "plugin:image|rgba",
+    "plugin:image|size",
+    "plugin:resources|close",
+    "plugin:window|activity_name",
+    "plugin:window|center",
+    "plugin:window|close",
+    "plugin:window|create",
+    "plugin:window|destroy",
+    "plugin:window|get_all_windows",
+    "plugin:window|hide",
+    "plugin:window|inner_position",
+    "plugin:window|inner_size",
+    "plugin:window|is_always_on_top",
+    "plugin:window|is_closable",
+    "plugin:window|is_decorated",
+    "plugin:window|is_enabled",
+    "plugin:window|is_focused",
+    "plugin:window|is_fullscreen",
+    "plugin:window|is_maximizable",
+    "plugin:window|is_maximized",
+    "plugin:window|is_minimizable",
+    "plugin:window|is_minimized",
+    "plugin:window|is_resizable",
+    "plugin:window|is_visible",
+    "plugin:window|maximize",
+    "plugin:window|minimize",
+    "plugin:window|outer_position",
+    "plugin:window|outer_size",
+    "plugin:window|request_user_attention",
+    "plugin:window|scale_factor",
+    "plugin:window|scene_identifier",
+    "plugin:window|set_always_on_bottom",
+    "plugin:window|set_always_on_top",
+    "plugin:window|set_background_color",
+    "plugin:window|set_badge_count",
+    "plugin:window|set_badge_label",
+    "plugin:window|set_closable",
+    "plugin:window|set_content_protected",
+    "plugin:window|set_cursor_grab",
+    "plugin:window|set_cursor_icon",
+    "plugin:window|set_cursor_position",
+    "plugin:window|set_cursor_visible",
+    "plugin:window|set_decorations",
+    "plugin:window|set_effects",
+    "plugin:window|set_enabled",
+    "plugin:window|set_focus",
+    "plugin:window|set_focusable",
+    "plugin:window|set_fullscreen",
+    "plugin:window|set_icon",
+    "plugin:window|set_ignore_cursor_events",
+    "plugin:window|set_max_size",
+    "plugin:window|set_maximizable",
+    "plugin:window|set_min_size",
+    "plugin:window|set_minimizable",
+    "plugin:window|set_overlay_icon",
+    "plugin:window|set_position",
+    "plugin:window|set_progress_bar",
+    "plugin:window|set_resizable",
+    "plugin:window|set_shadow",
+    "plugin:window|set_simple_fullscreen",
+    "plugin:window|set_size",
+    "plugin:window|set_size_constraints",
+    "plugin:window|set_skip_taskbar",
+    "plugin:window|set_theme",
+    "plugin:window|set_title",
+    "plugin:window|set_title_bar_style",
+    "plugin:window|set_visible_on_all_workspaces",
+    "plugin:window|show",
+    "plugin:window|start_dragging",
+    "plugin:window|start_resize_dragging",
+    "plugin:window|theme",
+    "plugin:window|title",
+    "plugin:window|toggle_maximize",
+    "plugin:window|unmaximize",
+    "plugin:window|unminimize"
+  ]
+}

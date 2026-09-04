@@ -1,0 +1,758 @@
+[
+  {
+    "key": "/assets/PacketCaptureView-C3Zoej4v.css",
+    "offset": 16426832,
+    "compressed_size": 1071,
+    "size": 4370,
+    "output": "assets\\PacketCaptureView-C3Zoej4v.css"
+  },
+  {
+    "key": "/assets/CameraScanView-18gwz4-y.js",
+    "offset": 16427941,
+    "compressed_size": 10626,
+    "size": 35066,
+    "output": "assets\\CameraScanView-18gwz4-y.js"
+  },
+  {
+    "key": "/assets/WifiPasswordView-Bgexd9_u.js",
+    "offset": 16438601,
+    "compressed_size": 1731,
+    "size": 4357,
+    "output": "assets\\WifiPasswordView-Bgexd9_u.js"
+  },
+  {
+    "key": "/assets/sausage-CoObHdFv.js",
+    "offset": 16440368,
+    "compressed_size": 437,
+    "size": 808,
+    "output": "assets\\sausage-CoObHdFv.js"
+  },
+  {
+    "key": "/assets/IpConflictView-DXVLnayK.css",
+    "offset": 16440832,
+    "compressed_size": 838,
+    "size": 3151,
+    "output": "assets\\IpConflictView-DXVLnayK.css"
+  },
+  {
+    "key": "/assets/CameraScanView-DpjPT13S.css",
+    "offset": 16441705,
+    "compressed_size": 2288,
+    "size": 12987,
+    "output": "assets\\CameraScanView-DpjPT13S.css"
+  },
+  {
+    "key": "/assets/NpcapInstallBanner-DeTiQOeB.css",
+    "offset": 16444028,
+    "compressed_size": 250,
+    "size": 500,
+    "output": "assets\\NpcapInstallBanner-DeTiQOeB.css"
+  },
+  {
+    "key": "/assets/WorkbenchView-B6HfdgSb.css",
+    "offset": 16444317,
+    "compressed_size": 2124,
+    "size": 10915,
+    "output": "assets\\WorkbenchView-B6HfdgSb.css"
+  },
+  {
+    "key": "/assets/ScoreGauge-Gv3cx0Lh.css",
+    "offset": 16446475,
+    "compressed_size": 65,
+    "size": 70,
+    "output": "assets\\ScoreGauge-Gv3cx0Lh.css"
+  },
+  {
+    "key": "/assets/HealthCheckView-Bd3Y3ydk.css",
+    "offset": 16446571,
+    "compressed_size": 1405,
+    "size": 6384,
+    "output": "assets\\HealthCheckView-Bd3Y3ydk.css"
+  },
+  {
+    "key": "/assets/WifiAnalyzeView-D_ud2CKN.js",
+    "offset": 16448012,
+    "compressed_size": 2383,
+    "size": 6693,
+    "output": "assets\\WifiAnalyzeView-D_ud2CKN.js"
+  },
+  {
+    "key": "/assets/install-Bg0Syj5C.js",
+    "offset": 16450430,
+    "compressed_size": 7930,
+    "size": 20079,
+    "output": "assets\\install-Bg0Syj5C.js"
+  },
+  {
+    "key": "/assets/RdpView-CWCPg5ss.js",
+    "offset": 16458387,
+    "compressed_size": 3389,
+    "size": 9026,
+    "output": "assets\\RdpView-CWCPg5ss.js"
+  },
+  {
+    "key": "/assets/MacLookupView-Co1GFkr5.css",
+    "offset": 16461803,
+    "compressed_size": 729,
+    "size": 2709,
+    "output": "assets\\MacLookupView-Co1GFkr5.css"
+  },
+  {
+    "key": "/assets/SettingsView-B4QFY_YN.js",
+    "offset": 16462566,
+    "compressed_size": 3739,
+    "size": 10978,
+    "output": "assets\\SettingsView-B4QFY_YN.js"
+  },
+  {
+    "key": "/assets/install-CIgk3cSO.js",
+    "offset": 16466337,
+    "compressed_size": 28518,
+    "size": 82585,
+    "output": "assets\\install-CIgk3cSO.js"
+  },
+  {
+    "key": "/assets/beijingTime-OyBL5kLd.js",
+    "offset": 16494882,
+    "compressed_size": 371,
+    "size": 859,
+    "output": "assets\\beijingTime-OyBL5kLd.js"
+  },
+  {
+    "key": "/assets/LogAuditView-BWhJhiUc.js",
+    "offset": 16495284,
+    "compressed_size": 2495,
+    "size": 6625,
+    "output": "assets\\LogAuditView-BWhJhiUc.js"
+  },
+  {
+    "key": "/assets/TracertView-DkFGw8gK.css",
+    "offset": 16497811,
+    "compressed_size": 918,
+    "size": 3993,
+    "output": "assets\\TracertView-DkFGw8gK.css"
+  },
+  {
+    "key": "/assets/index-DPa_0WKj.css",
+    "offset": 16498761,
+    "compressed_size": 2160,
+    "size": 8078,
+    "output": "assets\\index-DPa_0WKj.css"
+  },
+  {
+    "key": "/assets/index-NGuDHuOo.js",
+    "offset": 16500947,
+    "compressed_size": 110,
+    "size": 128,
+    "output": "assets\\index-NGuDHuOo.js"
+  },
+  {
+    "key": "/assets/ScoreGauge-BclkhPCK.js",
+    "offset": 16501082,
+    "compressed_size": 625,
+    "size": 1096,
+    "output": "assets\\ScoreGauge-BclkhPCK.js"
+  },
+  {
+    "key": "/assets/HealthCheckView-DvYBsNta.js",
+    "offset": 16501737,
+    "compressed_size": 4216,
+    "size": 11829,
+    "output": "assets\\HealthCheckView-DvYBsNta.js"
+  },
+  {
+    "key": "/assets/WifiAnalyzeView-sAlWJ0uG.css",
+    "offset": 16505988,
+    "compressed_size": 558,
+    "size": 1879,
+    "output": "assets\\WifiAnalyzeView-sAlWJ0uG.css"
+  },
+  {
+    "key": "/assets/LegendVisualProvider-Bdgkckq-.js",
+    "offset": 16506582,
+    "compressed_size": 327,
+    "size": 754,
+    "output": "assets\\LegendVisualProvider-Bdgkckq-.js"
+  },
+  {
+    "key": "/assets/RouteTableView-ByQNgZ0i.js",
+    "offset": 16506949,
+    "compressed_size": 2348,
+    "size": 6546,
+    "output": "assets\\RouteTableView-ByQNgZ0i.js"
+  },
+  {
+    "key": "/assets/LocalSettingsView-CGNr_1Dz.js",
+    "offset": 16509331,
+    "compressed_size": 7031,
+    "size": 22364,
+    "output": "assets\\LocalSettingsView-CGNr_1Dz.js"
+  },
+  {
+    "key": "/assets/LanSpeedView-BuWLXOnX.js",
+    "offset": 16516399,
+    "compressed_size": 3255,
+    "size": 9365,
+    "output": "assets\\LanSpeedView-BuWLXOnX.js"
+  },
+  {
+    "key": "/assets/install-BwqLQ-IK.js",
+    "offset": 16519686,
+    "compressed_size": 2394,
+    "size": 6375,
+    "output": "assets\\install-BwqLQ-IK.js"
+  },
+  {
+    "key": "/assets/LinkMonitorView-DyZKxtLL.js",
+    "offset": 16522107,
+    "compressed_size": 6473,
+    "size": 19939,
+    "output": "assets\\LinkMonitorView-DyZKxtLL.js"
+  },
+  {
+    "key": "/assets/PageTabs-xiUD-T3e.css",
+    "offset": 16528615,
+    "compressed_size": 344,
+    "size": 745,
+    "output": "assets\\PageTabs-xiUD-T3e.css"
+  },
+  {
+    "key": "/assets/ToolboxView-Djr3XzsI.css",
+    "offset": 16528988,
+    "compressed_size": 1020,
+    "size": 4313,
+    "output": "assets\\ToolboxView-Djr3XzsI.css"
+  },
+  {
+    "key": "/assets/FirewallView-B5Jv3mdn.js",
+    "offset": 16530040,
+    "compressed_size": 2846,
+    "size": 8280,
+    "output": "assets\\FirewallView-B5Jv3mdn.js"
+  },
+  {
+    "key": "/assets/install-DSEpQEQI.js",
+    "offset": 16532918,
+    "compressed_size": 6301,
+    "size": 18351,
+    "output": "assets\\install-DSEpQEQI.js"
+  },
+  {
+    "key": "/assets/install-B1KIHPBh.js",
+    "offset": 16539246,
+    "compressed_size": 12102,
+    "size": 33517,
+    "output": "assets\\install-B1KIHPBh.js"
+  },
+  {
+    "key": "/assets/useGreeting-CGe5T1Vt.js",
+    "offset": 16551375,
+    "compressed_size": 565,
+    "size": 927,
+    "output": "assets\\useGreeting-CGe5T1Vt.js"
+  },
+  {
+    "key": "/assets/LogAuditView-BgpQqWYG.css",
+    "offset": 16551971,
+    "compressed_size": 759,
+    "size": 2892,
+    "output": "assets\\LogAuditView-BgpQqWYG.css"
+  },
+  {
+    "key": "/assets/useAiConfig-Dz6aMQZU.js",
+    "offset": 16552763,
+    "compressed_size": 462,
+    "size": 935,
+    "output": "assets\\useAiConfig-Dz6aMQZU.js"
+  },
+  {
+    "key": "/assets/RemoteTerminalView-BYoeN4MF.css",
+    "offset": 16553256,
+    "compressed_size": 1167,
+    "size": 5139,
+    "output": "assets\\RemoteTerminalView-BYoeN4MF.css"
+  },
+  {
+    "key": "/assets/NetServicesView-uwe4jnVf.css",
+    "offset": 16554462,
+    "compressed_size": 1963,
+    "size": 9659,
+    "output": "assets\\NetServicesView-uwe4jnVf.css"
+  },
+  {
+    "key": "/assets/LldpView-fwlGvk8J.css",
+    "offset": 16556461,
+    "compressed_size": 1668,
+    "size": 7520,
+    "output": "assets\\LldpView-fwlGvk8J.css"
+  },
+  {
+    "key": "/assets/TracertView-iKFmwbKm.js",
+    "offset": 16558158,
+    "compressed_size": 5197,
+    "size": 12613,
+    "output": "assets\\TracertView-iKFmwbKm.js"
+  },
+  {
+    "key": "/assets/PingView-Q_KzxNFf.css",
+    "offset": 16563386,
+    "compressed_size": 2757,
+    "size": 23818,
+    "output": "assets\\PingView-Q_KzxNFf.css"
+  },
+  {
+    "key": "/assets/DhcpDetectView-CLoeN9SQ.js",
+    "offset": 16566172,
+    "compressed_size": 3100,
+    "size": 7708,
+    "output": "assets\\DhcpDetectView-CLoeN9SQ.js"
+  },
+  {
+    "key": "/assets/IpInfoView-CJSSaJT4.js",
+    "offset": 16569306,
+    "compressed_size": 2611,
+    "size": 6964,
+    "output": "assets\\IpInfoView-CJSSaJT4.js"
+  },
+  {
+    "key": "/assets/MarkerView-B6-r5UvE.js",
+    "offset": 16571947,
+    "compressed_size": 1993,
+    "size": 5037,
+    "output": "assets\\MarkerView-B6-r5UvE.js"
+  },
+  {
+    "key": "/assets/AiAssistantView-BAiTmzAG.js",
+    "offset": 16573970,
+    "compressed_size": 4934,
+    "size": 12753,
+    "output": "assets\\AiAssistantView-BAiTmzAG.js"
+  },
+  {
+    "key": "/assets/SecurityTestView-B2CFUoH3.js",
+    "offset": 16578939,
+    "compressed_size": 2066,
+    "size": 4830,
+    "output": "assets\\SecurityTestView-B2CFUoH3.js"
+  },
+  {
+    "key": "/assets/points-qIwBD3ow.js",
+    "offset": 16581041,
+    "compressed_size": 2916,
+    "size": 7554,
+    "output": "assets\\points-qIwBD3ow.js"
+  },
+  {
+    "key": "/tauri.svg",
+    "offset": 16583983,
+    "compressed_size": 1289,
+    "size": 2605,
+    "output": "tauri.svg"
+  },
+  {
+    "key": "/assets/install-BpiDeX-u.js",
+    "offset": 16585282,
+    "compressed_size": 8050,
+    "size": 21383,
+    "output": "assets\\install-BpiDeX-u.js"
+  },
+  {
+    "key": "/assets/RdpView-0DrSvZ5d.css",
+    "offset": 16593359,
+    "compressed_size": 1185,
+    "size": 4605,
+    "output": "assets\\RdpView-0DrSvZ5d.css"
+  },
+  {
+    "key": "/assets/xterm-6GBZ9nXN.css",
+    "offset": 16594572,
+    "compressed_size": 1669,
+    "size": 5244,
+    "output": "assets\\xterm-6GBZ9nXN.css"
+  },
+  {
+    "key": "/assets/SettingsView-B88isiwa.css",
+    "offset": 16596267,
+    "compressed_size": 1735,
+    "size": 8478,
+    "output": "assets\\SettingsView-B88isiwa.css"
+  },
+  {
+    "key": "/assets/index-dl-4Ci8K.js",
+    "offset": 16598035,
+    "compressed_size": 147,
+    "size": 282,
+    "output": "assets\\index-dl-4Ci8K.js"
+  },
+  {
+    "key": "/assets/SpeedTestView-DECjiZwD.js",
+    "offset": 16598207,
+    "compressed_size": 2759,
+    "size": 6698,
+    "output": "assets\\SpeedTestView-DECjiZwD.js"
+  },
+  {
+    "key": "/assets/SessionTestView-D_wGgjZy.js",
+    "offset": 16600999,
+    "compressed_size": 2020,
+    "size": 5516,
+    "output": "assets\\SessionTestView-D_wGgjZy.js"
+  },
+  {
+    "key": "/assets/ConnTestView-m6cC7fz2.css",
+    "offset": 16603054,
+    "compressed_size": 4003,
+    "size": 54325,
+    "output": "assets\\ConnTestView-m6cC7fz2.css"
+  },
+  {
+    "key": "/assets/SecurityTestView-Imvri1aG.css",
+    "offset": 16607090,
+    "compressed_size": 984,
+    "size": 4269,
+    "output": "assets\\SecurityTestView-Imvri1aG.css"
+  },
+  {
+    "key": "/assets/IpConflictView-CMq5rhiO.js",
+    "offset": 16608111,
+    "compressed_size": 2217,
+    "size": 5665,
+    "output": "assets\\IpConflictView-CMq5rhiO.js"
+  },
+  {
+    "key": "/assets/PageTabs-S7SJq5-f.js",
+    "offset": 16610362,
+    "compressed_size": 344,
+    "size": 540,
+    "output": "assets\\PageTabs-S7SJq5-f.js"
+  },
+  {
+    "key": "/assets/xterm-XOw-FC4b.js",
+    "offset": 16610734,
+    "compressed_size": 77304,
+    "size": 334212,
+    "output": "assets\\xterm-XOw-FC4b.js"
+  },
+  {
+    "key": "/assets/SerialView-BmK87wgi.css",
+    "offset": 16688063,
+    "compressed_size": 802,
+    "size": 3021,
+    "output": "assets\\SerialView-BmK87wgi.css"
+  },
+  {
+    "key": "/vite.svg",
+    "offset": 16688896,
+    "compressed_size": 712,
+    "size": 1497,
+    "output": "vite.svg"
+  },
+  {
+    "key": "/assets/install-6XjsQTvv.js",
+    "offset": 16689617,
+    "compressed_size": 6335,
+    "size": 15369,
+    "output": "assets\\install-6XjsQTvv.js"
+  },
+  {
+    "key": "/assets/ProtocolAnalyzeView-CGjTGtwV.js",
+    "offset": 16695979,
+    "compressed_size": 3528,
+    "size": 10784,
+    "output": "assets\\ProtocolAnalyzeView-CGjTGtwV.js"
+  },
+  {
+    "key": "/assets/NpcapInstallBanner-rbfpE5Xc.js",
+    "offset": 16699546,
+    "compressed_size": 598,
+    "size": 920,
+    "output": "assets\\NpcapInstallBanner-rbfpE5Xc.js"
+  },
+  {
+    "key": "/assets/FirewallView-DlAfJK3g.css",
+    "offset": 16700182,
+    "compressed_size": 1034,
+    "size": 4453,
+    "output": "assets\\FirewallView-DlAfJK3g.css"
+  },
+  {
+    "key": "/assets/RouteTableView-BdwZpIwz.css",
+    "offset": 16701249,
+    "compressed_size": 719,
+    "size": 2679,
+    "output": "assets\\RouteTableView-BdwZpIwz.css"
+  },
+  {
+    "key": "/assets/SubnetCalcView-0FR3FcU_.css",
+    "offset": 16702003,
+    "compressed_size": 914,
+    "size": 3985,
+    "output": "assets\\SubnetCalcView-0FR3FcU_.css"
+  },
+  {
+    "key": "/assets/PacketCaptureView-D09XCcto.js",
+    "offset": 16702952,
+    "compressed_size": 4044,
+    "size": 10191,
+    "output": "assets\\PacketCaptureView-D09XCcto.js"
+  },
+  {
+    "key": "/assets/ProtocolAnalyzeView-DKr6DEB3.css",
+    "offset": 16707033,
+    "compressed_size": 874,
+    "size": 3400,
+    "output": "assets\\ProtocolAnalyzeView-DKr6DEB3.css"
+  },
+  {
+    "key": "/assets/LldpView-BZMMAlIC.js",
+    "offset": 16707947,
+    "compressed_size": 3497,
+    "size": 8676,
+    "output": "assets\\LldpView-BZMMAlIC.js"
+  },
+  {
+    "key": "/assets/useThemeColors-DEU6HLyc.js",
+    "offset": 16711472,
+    "compressed_size": 118622,
+    "size": 372825,
+    "output": "assets\\useThemeColors-DEU6HLyc.js"
+  },
+  {
+    "key": "/assets/WifiPasswordView-lfgGC3iv.css",
+    "offset": 16830128,
+    "compressed_size": 535,
+    "size": 1760,
+    "output": "assets\\WifiPasswordView-lfgGC3iv.css"
+  },
+  {
+    "key": "/assets/SpeedTestView-Ct_D8bwS.css",
+    "offset": 16830700,
+    "compressed_size": 763,
+    "size": 3149,
+    "output": "assets\\SpeedTestView-Ct_D8bwS.css"
+  },
+  {
+    "key": "/assets/WorkbenchView-CpfGwIVn.js",
+    "offset": 16831497,
+    "compressed_size": 4836,
+    "size": 14270,
+    "output": "assets\\WorkbenchView-CpfGwIVn.js"
+  },
+  {
+    "key": "/assets/install-DrCsPcv2.js",
+    "offset": 16836366,
+    "compressed_size": 4555,
+    "size": 11795,
+    "output": "assets\\install-DrCsPcv2.js"
+  },
+  {
+    "key": "/assets/NetServicesView-C6LD9HQs.js",
+    "offset": 16840948,
+    "compressed_size": 4678,
+    "size": 14498,
+    "output": "assets\\NetServicesView-C6LD9HQs.js"
+  },
+  {
+    "key": "/assets/index-DNL4tSY9.js",
+    "offset": 16845661,
+    "compressed_size": 364913,
+    "size": 1543840,
+    "output": "assets\\index-DNL4tSY9.js"
+  },
+  {
+    "key": "/assets/install-SjAAeT5E.js",
+    "offset": 17210599,
+    "compressed_size": 3645,
+    "size": 9415,
+    "output": "assets\\install-SjAAeT5E.js"
+  },
+  {
+    "key": "/assets/LanSpeedView-D9sk0ki2.css",
+    "offset": 17214271,
+    "compressed_size": 730,
+    "size": 2766,
+    "output": "assets\\LanSpeedView-D9sk0ki2.css"
+  },
+  {
+    "key": "/assets/PingView-CU5BaB_p.js",
+    "offset": 17215034,
+    "compressed_size": 16343,
+    "size": 56060,
+    "output": "assets\\PingView-CU5BaB_p.js"
+  },
+  {
+    "key": "/index.html",
+    "offset": 17231405,
+    "compressed_size": 368,
+    "size": 806,
+    "output": "index.html"
+  },
+  {
+    "key": "/assets/SerialView-CaiUwAdE.js",
+    "offset": 17231784,
+    "compressed_size": 2226,
+    "size": 5614,
+    "output": "assets\\SerialView-CaiUwAdE.js"
+  },
+  {
+    "key": "/assets/LocalSettingsView-CJJ2ZOeC.css",
+    "offset": 17234040,
+    "compressed_size": 2057,
+    "size": 10739,
+    "output": "assets\\LocalSettingsView-CJJ2ZOeC.css"
+  },
+  {
+    "key": "/assets/PortScanView-DB_nfGET.js",
+    "offset": 17236135,
+    "compressed_size": 4606,
+    "size": 11935,
+    "output": "assets\\PortScanView-DB_nfGET.js"
+  },
+  {
+    "key": "/assets/createSeriesDataSimply-Cz60qhMH.js",
+    "offset": 17240773,
+    "compressed_size": 186,
+    "size": 246,
+    "output": "assets\\createSeriesDataSimply-Cz60qhMH.js"
+  },
+  {
+    "key": "/assets/MacLookupView-DiGzOJ7d.js",
+    "offset": 17241001,
+    "compressed_size": 2083,
+    "size": 4974,
+    "output": "assets\\MacLookupView-DiGzOJ7d.js"
+  },
+  {
+    "key": "/assets/IpInfoView-OxBIIRom.css",
+    "offset": 17243117,
+    "compressed_size": 900,
+    "size": 3768,
+    "output": "assets\\IpInfoView-OxBIIRom.css"
+  },
+  {
+    "key": "/assets/AiAssistantView-C3c_fQBX.css",
+    "offset": 17244048,
+    "compressed_size": 1585,
+    "size": 6953,
+    "output": "assets\\AiAssistantView-C3c_fQBX.css"
+  },
+  {
+    "key": "/assets/AboutView-DJsbRVCe.js",
+    "offset": 17245669,
+    "compressed_size": 4308,
+    "size": 12483,
+    "output": "assets\\AboutView-DJsbRVCe.js"
+  },
+  {
+    "key": "/assets/TrafficMonitorView-DzBJhVY4.css",
+    "offset": 17250006,
+    "compressed_size": 668,
+    "size": 2180,
+    "output": "assets\\TrafficMonitorView-DzBJhVY4.css"
+  },
+  {
+    "key": "/assets/SubnetCalcView-BTWQtDZZ.js",
+    "offset": 17250713,
+    "compressed_size": 3952,
+    "size": 13388,
+    "output": "assets\\SubnetCalcView-BTWQtDZZ.js"
+  },
+  {
+    "key": "/assets/AboutView-BZ5BsAhh.css",
+    "offset": 17254699,
+    "compressed_size": 2038,
+    "size": 10649,
+    "output": "assets\\AboutView-BZ5BsAhh.css"
+  },
+  {
+    "key": "/assets/HostDiscoveryView-XidvJWTg.css",
+    "offset": 17256767,
+    "compressed_size": 1864,
+    "size": 9305,
+    "output": "assets\\HostDiscoveryView-XidvJWTg.css"
+  },
+  {
+    "key": "/assets/SessionTestView-Bbj1w-Rv.css",
+    "offset": 17258669,
+    "compressed_size": 674,
+    "size": 2327,
+    "output": "assets\\SessionTestView-Bbj1w-Rv.css"
+  },
+  {
+    "key": "/assets/ConnTestView-C_7Wewts.js",
+    "offset": 17259379,
+    "compressed_size": 12232,
+    "size": 52667,
+    "output": "assets\\ConnTestView-C_7Wewts.js"
+  },
+  {
+    "key": "/assets/RemoteTerminalView-XCM0-W3p.js",
+    "offset": 17271643,
+    "compressed_size": 4066,
+    "size": 10861,
+    "output": "assets\\RemoteTerminalView-XCM0-W3p.js"
+  },
+  {
+    "key": "/assets/TrafficMonitorView-5gSYrBJv.js",
+    "offset": 17275747,
+    "compressed_size": 3048,
+    "size": 9063,
+    "output": "assets\\TrafficMonitorView-5gSYrBJv.js"
+  },
+  {
+    "key": "/assets/ToolboxView-BHzXv0xX.js",
+    "offset": 17278833,
+    "compressed_size": 14473,
+    "size": 43097,
+    "output": "assets\\ToolboxView-BHzXv0xX.js"
+  },
+  {
+    "key": "/assets/PortScanView-ByRwFURH.css",
+    "offset": 17293337,
+    "compressed_size": 1400,
+    "size": 6107,
+    "output": "assets\\PortScanView-ByRwFURH.css"
+  },
+  {
+    "key": "/favicon.svg",
+    "offset": 17294770,
+    "compressed_size": 352,
+    "size": 758,
+    "output": "favicon.svg"
+  },
+  {
+    "key": "/assets/HostDiscoveryView-DfSQsn3D.js",
+    "offset": 17295134,
+    "compressed_size": 5939,
+    "size": 15985,
+    "output": "assets\\HostDiscoveryView-DfSQsn3D.js"
+  },
+  {
+    "key": "/assets/LinkMonitorView-DnKbEXD1.css",
+    "offset": 17301110,
+    "compressed_size": 1233,
+    "size": 5549,
+    "output": "assets\\LinkMonitorView-DnKbEXD1.css"
+  },
+  {
+    "key": "/assets/dataSample-Cqp3lA6C.js",
+    "offset": 17302379,
+    "compressed_size": 537,
+    "size": 1107,
+    "output": "assets\\dataSample-Cqp3lA6C.js"
+  },
+  {
+    "key": "/assets/sectorHelper-BvK_qgfw.js",
+    "offset": 17302946,
+    "compressed_size": 194,
+    "size": 272,
+    "output": "assets\\sectorHelper-BvK_qgfw.js"
+  },
+  {
+    "key": "/assets/DhcpDetectView-BK84lhEI.css",
+    "offset": 17303172,
+    "compressed_size": 872,
+    "size": 3525,
+    "output": "assets\\DhcpDetectView-BK84lhEI.css"
+  }
+]
