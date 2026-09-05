@@ -10,6 +10,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, State};
 
 static EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+static MODBUS_TRANSACTION: AtomicU64 = AtomicU64::new(1);
 
 struct ProtocolServer {
     running: Arc<AtomicBool>,
@@ -143,6 +144,9 @@ pub struct ProtocolServerRequest {
     serial_port: Option<String>,
     baud_rate: Option<u32>,
     parity: Option<String>,
+    unit_id: Option<u8>,
+    data_bits: Option<u8>,
+    stop_bits: Option<u8>,
     response_mode: Option<String>,
     response_input_mode: Option<String>,
     text_encoding: Option<String>,
@@ -377,7 +381,7 @@ fn drain_tcp_frames(buffer: &mut Vec<u8>, incoming: &[u8], framing: &TcpFraming)
                 let declared = u16::from_be_bytes([buffer[4], buffer[5]]) as usize;
                 let total = 6 + declared;
                 if !(8..=260).contains(&total) {
-                    frames.push(std::mem::take(buffer));
+                    buffer.clear();
                     break;
                 }
                 if buffer.len() < total { break; }
@@ -622,100 +626,165 @@ pub async fn protocol_udp_exchange(req: RawExchangeRequest) -> Result<Value, Str
 }
 
 fn modbus_pdu(function: u8, address: u16, quantity: Option<u16>, values: Option<&[u16]>) -> Result<Vec<u8>, String> {
+    let values = values.unwrap_or(&[]);
+    let count = match function {
+        1..=4 => quantity.unwrap_or(1) as usize,
+        5 | 6 => {
+            if values.len() != 1 || quantity.is_some_and(|count| count != 1) {
+                return Err("Single write requires exactly one value".into());
+            }
+            1
+        }
+        15 | 16 => {
+            if quantity.is_some_and(|count| count as usize != values.len()) {
+                return Err("Write quantity does not match value count".into());
+            }
+            values.len()
+        }
+        _ => return Err("Supported functions: 01/02/03/04/05/06/0F/10".into()),
+    };
+    let limit = match function { 1 | 2 => 2000, 3 | 4 => 125, 15 => 1968, 16 => 123, _ => 1 };
+    if count == 0 || count > limit { return Err(format!("Quantity must be between 1 and {limit}")); }
+    if address as usize + count > 65_536 { return Err("Address range exceeds 65535".into()); }
     let mut pdu = vec![function];
     pdu.extend_from_slice(&address.to_be_bytes());
     match function {
-        1..=4 => pdu.extend_from_slice(&quantity.unwrap_or(1).clamp(1, 2_000).to_be_bytes()),
-        5 | 6 => pdu.extend_from_slice(&values.and_then(|items| items.first()).copied().unwrap_or(0).to_be_bytes()),
+        1..=4 => pdu.extend_from_slice(&(count as u16).to_be_bytes()),
+        5 => {
+            let wire: u16 = match values[0] { 0 => 0, 1 | 0xFF00 => 0xFF00, _ => return Err("Invalid coil value".into()) };
+            pdu.extend_from_slice(&wire.to_be_bytes());
+        }
+        6 => pdu.extend_from_slice(&values[0].to_be_bytes()),
         15 => {
-            let bits = values.unwrap_or(&[]);
-            let count = quantity.unwrap_or(bits.len() as u16).clamp(1, 1_968);
-            let mut packed = vec![0_u8; (count as usize + 7) / 8];
-            for (index, value) in bits.iter().take(count as usize).enumerate() {
+            if values.iter().any(|value| *value > 1) { return Err("Multiple coils require 0 or 1".into()); }
+            let mut packed = vec![0_u8; count.div_ceil(8)];
+            for (index, value) in values.iter().enumerate() {
                 if *value != 0 { packed[index / 8] |= 1 << (index % 8); }
             }
-            pdu.extend_from_slice(&count.to_be_bytes());
+            pdu.extend_from_slice(&(count as u16).to_be_bytes());
             pdu.push(packed.len() as u8);
             pdu.extend_from_slice(&packed);
         }
         16 => {
-            let registers = values.unwrap_or(&[]);
-            if registers.is_empty() || registers.len() > 123 { return Err("写多个寄存器需要 1-123 个数值".into()); }
-            pdu.extend_from_slice(&(registers.len() as u16).to_be_bytes());
-            pdu.push((registers.len() * 2) as u8);
-            for value in registers { pdu.extend_from_slice(&value.to_be_bytes()); }
+            pdu.extend_from_slice(&(count as u16).to_be_bytes());
+            pdu.push((count * 2) as u8);
+            for value in values { pdu.extend_from_slice(&value.to_be_bytes()); }
         }
         _ => return Err("支持功能码 01/02/03/04/05/06/0F/10".into()),
     }
     Ok(pdu)
 }
 
+fn remaining(deadline: Instant) -> Result<Duration, String> {
+    deadline.checked_duration_since(Instant::now()).filter(|wait| !wait.is_zero())
+        .ok_or_else(|| "Modbus response deadline exceeded".into())
+}
+
+// Read only the current ADU, with one deadline across all fragmented reads.
+fn read_modbus_frame(mut read: impl FnMut(&mut [u8], Duration) -> std::io::Result<usize>, deadline: Instant, rtu: bool) -> Result<Vec<u8>, String> {
+    let mut frame = Vec::new();
+    let mut expected = if rtu { 2 } else { 6 };
+    loop {
+        if frame.len() == expected {
+            if !rtu && expected == 6 {
+                let length = u16::from_be_bytes([frame[4], frame[5]]) as usize;
+                if frame[2..4] != [0, 0] || !(2..=254).contains(&length) {
+                    return Err(format!("Invalid MBAP header; RX={}", hex(&frame)));
+                }
+                expected = 6 + length;
+            } else if rtu && expected == 2 {
+                expected = match frame[1] { 1..=4 => 3, 5 | 6 | 15 | 16 => 8, fc if fc & 0x80 != 0 => 5, _ => return Err(format!("Invalid RTU function; RX={}", hex(&frame))) };
+            } else if rtu && expected == 3 {
+                expected = frame[2] as usize + 5;
+                if expected > 256 { return Err(format!("RTU frame too long; RX={}", hex(&frame))); }
+            } else {
+                return Ok(frame);
+            }
+        }
+        let mut chunk = [0_u8; 260];
+        let wait = remaining(deadline).map_err(|error| format!("{error}; RX={}", hex(&frame)))?;
+        match read(&mut chunk[..expected - frame.len()], wait) {
+            Ok(0) => return Err(format!("Incomplete Modbus response; RX={}", hex(&frame))),
+            Ok(size) => frame.extend_from_slice(&chunk[..size]),
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(format!("Modbus receive failed: {error}; RX={}", hex(&frame))),
+        }
+    }
+}
+
+fn parse_modbus_response(request: &[u8], response: &[u8]) -> Result<Value, String> {
+    let function = request[0];
+    let response_function = *response.first().ok_or("Empty Modbus PDU")?;
+    if response_function == (function | 0x80) {
+        if response.len() != 2 { return Err("Invalid Modbus exception length".into()); }
+        return Err(format!("Modbus exception: FC {function:02X}, code {:02X}", response[1]));
+    }
+    if response_function != function { return Err("Modbus response function mismatch".into()); }
+    let address = u16::from_be_bytes([request[1], request[2]]);
+    let quantity = u16::from_be_bytes([request[3], request[4]]) as usize;
+    let mut result = json!({"function":function,"data_hex":hex(&response[1..])});
+    match function {
+        1..=4 => {
+            let expected = if function <= 2 { quantity.div_ceil(8) } else { quantity * 2 };
+            if response.len() != expected + 2 || response[1] as usize != expected {
+                return Err(format!("Modbus response byte count mismatch: expected {expected}"));
+            }
+            if function <= 2 {
+                result["bits"] = json!((0..quantity).map(|i| response[2 + i / 8] & (1 << (i % 8)) != 0).collect::<Vec<_>>());
+            } else {
+                result["registers"] = json!(response[2..].chunks_exact(2).map(|word| u16::from_be_bytes([word[0], word[1]])).collect::<Vec<_>>());
+            }
+        }
+        5 | 6 | 15 | 16 => {
+            if response != &request[..5] { return Err("Modbus write acknowledgement mismatch".into()); }
+            result["write_ack"] = json!({"address":address,"quantity":if function <= 6 { 1 } else { quantity }});
+        }
+        _ => return Err("Unsupported Modbus response function".into()),
+    }
+    Ok(result)
+}
+
+fn parse_modbus_tcp_response(request: &[u8], response: &[u8]) -> Result<Value, String> {
+    if response.len() < 8 || response.len() > 260 { return Err("Invalid Modbus TCP length".into()); }
+    if response[..4] != request[..4] || response[2..4] != [0, 0] || response[6] != request[6] {
+        return Err("Modbus transaction/protocol/unit mismatch".into());
+    }
+    if u16::from_be_bytes([response[4], response[5]]) as usize + 6 != response.len() {
+        return Err("Modbus MBAP length mismatch".into());
+    }
+    parse_modbus_response(&request[7..], &response[7..])
+}
+
+fn modbus_tcp_blocking(req: ModbusRequest) -> Result<Value, String> {
+    let pdu = modbus_pdu(req.function, req.address, req.quantity, req.values.as_deref())?;
+    let transaction = MODBUS_TRANSACTION.fetch_add(1, Ordering::Relaxed) as u16;
+    let mut frame = transaction.to_be_bytes().to_vec();
+    frame.extend_from_slice(&[0, 0]);
+    frame.extend_from_slice(&((pdu.len() + 1) as u16).to_be_bytes());
+    frame.push(req.unit_id);
+    frame.extend_from_slice(&pdu);
+    let peer = resolve(&req.host, req.port)?;
+    let started = Instant::now();
+    let deadline = started + timeout(req.timeout_ms);
+    let mut stream = TcpStream::connect_timeout(&peer, remaining(deadline)?).map_err(|error| error.to_string())?;
+    stream.set_write_timeout(Some(remaining(deadline)?)).map_err(|error| error.to_string())?;
+    stream.write_all(&frame).map_err(|error| error.to_string())?;
+    let received = read_modbus_frame(|buffer, wait| {
+        stream.set_read_timeout(Some(wait))?;
+        stream.read(buffer)
+    }, deadline, false).map_err(|error| format!("{error}; TX={}", hex(&frame)))?;
+    let parsed = parse_modbus_tcp_response(&frame, &received)
+        .map_err(|error| format!("{error}; TX={}; RX={}", hex(&frame), hex(&received)))?;
+    let mut result = exchange_result(&frame, &received, started.elapsed(), peer.to_string(), "utf-8");
+    result.as_object_mut().unwrap().extend(parsed.as_object().unwrap().clone());
+    result["protocol"] = json!("Modbus TCP");
+    result["unit_id"] = json!(req.unit_id);
+    Ok(result)
+}
+
 #[tauri::command]
 pub async fn protocol_modbus_tcp(req: ModbusRequest) -> Result<Value, String> {
-    tokio::task::spawn_blocking(move || {
-        let function = req.function;
-        let quantity = req.quantity.unwrap_or(1);
-        let pdu = modbus_pdu(req.function, req.address, req.quantity, req.values.as_deref())?;
-        let transaction = (Instant::now().elapsed().as_nanos() as u16).wrapping_add(req.address);
-        let mut frame = Vec::with_capacity(pdu.len() + 7);
-        frame.extend_from_slice(&transaction.to_be_bytes());
-        frame.extend_from_slice(&[0, 0]);
-        frame.extend_from_slice(&((pdu.len() + 1) as u16).to_be_bytes());
-        frame.push(req.unit_id);
-        frame.extend_from_slice(&pdu);
-        let raw = RawExchangeRequest { host:req.host, port:req.port, payload:hex(&frame), encoding:Some("hex".into()), timeout_ms:req.timeout_ms, input_mode:Some("hex".into()), text_encoding:None, parse_escapes:None, line_ending:None, custom_suffix_hex:None };
-        let mut result = tcp_exchange_blocking(raw)?;
-        let received = decode_payload(result["received_hex"].as_str().unwrap_or(""), Some("hex"))?;
-        if received.len() < 9 { return Err("Modbus TCP 响应过短或超时".into()); }
-        if received[7] & 0x80 != 0 { return Err(format!("Modbus 异常响应，功能码 {:02X}，异常码 {:02X}", received[7], received[8])); }
-        result["protocol"] = json!("Modbus TCP");
-        result["unit_id"] = json!(received[6]);
-        result["function"] = json!(received[7]);
-        result["data_hex"] = json!(hex(&received[8..]));
-        let response_pdu = &received[7..];
-        match function {
-            1 | 2 => {
-                let byte_count = response_pdu.get(1).copied().unwrap_or(0) as usize;
-                if response_pdu.len() != 2 + byte_count {
-                    return Err(format!("Modbus 位响应 byte count 不一致：声明 {byte_count}，实际 {}", response_pdu.len().saturating_sub(2)));
-                }
-                let mut bits = Vec::with_capacity(quantity as usize);
-                for index in 0..quantity as usize {
-                    bits.push(response_pdu[2 + (index / 8)] & (1 << (index % 8)) != 0);
-                }
-                result["bits"] = json!(bits);
-            }
-            3 | 4 => {
-                let byte_count = response_pdu.get(1).copied().unwrap_or(0) as usize;
-                if byte_count != quantity as usize * 2 || response_pdu.len() != 2 + byte_count {
-                    return Err(format!("Modbus 寄存器响应 byte count 不一致：期望 {}，接收 {byte_count}", quantity as usize * 2));
-                }
-                let registers = (0..quantity as usize)
-                    .map(|index| u16::from_be_bytes([response_pdu[2 + index * 2], response_pdu[3 + index * 2]]))
-                    .collect::<Vec<_>>();
-                result["registers"] = json!(registers);
-            }
-            5 | 6 => {
-                if response_pdu.len() != 5 || response_pdu != pdu.as_slice() {
-                    return Err("Modbus 写单点响应与请求回显不一致".into());
-                }
-                result["write_ack"] = json!({"address":req.address,"quantity":1});
-            }
-            15 | 16 => {
-                if response_pdu.len() != 5 {
-                    return Err(format!("Modbus 写多点响应长度错误：{} 字节", response_pdu.len()));
-                }
-                let response_address = u16::from_be_bytes([response_pdu[1], response_pdu[2]]);
-                let response_quantity = u16::from_be_bytes([response_pdu[3], response_pdu[4]]);
-                if response_address != req.address || response_quantity != quantity {
-                    return Err("Modbus 写多点响应地址/数量与请求不一致".into());
-                }
-                result["write_ack"] = json!({"address":response_address,"quantity":response_quantity});
-            }
-            _ => {}
-        }
-        Ok(result)
-    }).await.map_err(|error| format!("Modbus TCP 任务失败：{error}"))?
+    tokio::task::spawn_blocking(move || modbus_tcp_blocking(req)).await.map_err(|error| format!("Modbus TCP task failed: {error}"))?
 }
 
 fn crc16_modbus(data: &[u8]) -> u16 {
@@ -727,31 +796,89 @@ fn crc16_modbus(data: &[u8]) -> u16 {
     crc
 }
 
+fn modbus_serial_builder(port: &str, baud: u32, data_bits: Option<u8>, stop_bits: Option<u8>, parity: Option<&str>, wait: Duration) -> Result<serialport::SerialPortBuilder, String> {
+    if data_bits.unwrap_or(8) != 8 { return Err("Modbus RTU requires 8 data bits".into()); }
+    if baud == 0 { return Err("Invalid baud rate".into()); }
+    let stop = match stop_bits.unwrap_or(1) { 1 => serialport::StopBits::One, 2 => serialport::StopBits::Two, _ => return Err("Invalid stop bits".into()) };
+    let parity = match parity.unwrap_or("none").to_ascii_lowercase().as_str() {
+        "none" => serialport::Parity::None, "odd" => serialport::Parity::Odd, "even" => serialport::Parity::Even,
+        _ => return Err("Invalid parity".into()),
+    };
+    Ok(serialport::new(port, baud).data_bits(serialport::DataBits::Eight).stop_bits(stop).parity(parity).timeout(wait))
+}
+
+fn parse_modbus_rtu_response(request: &[u8], response: &[u8]) -> Result<Value, String> {
+    if !(5..=256).contains(&response.len()) { return Err("Invalid Modbus RTU response length".into()); }
+    let body = response.len() - 2;
+    if crc16_modbus(&response[..body]) != u16::from_le_bytes([response[body], response[body + 1]]) {
+        return Err("Modbus RTU CRC mismatch".into());
+    }
+    if response[0] != request[0] { return Err("Modbus RTU unit mismatch".into()); }
+    parse_modbus_response(&request[1..request.len() - 2], &response[1..body])
+}
+
+fn drain_rtu_requests(buffer: &mut Vec<u8>, incoming: &[u8]) -> Vec<Vec<u8>> {
+    buffer.extend_from_slice(incoming);
+    let mut frames = Vec::new();
+    while buffer.len() >= 2 {
+        let length = match buffer[1] {
+            1..=6 => 8,
+            15 | 16 => {
+                if buffer.len() < 7 { break; }
+                9 + buffer[6] as usize
+            }
+            _ => { buffer.clear(); break; }
+        };
+        if length > 256 { buffer.clear(); break; }
+        if buffer.len() < length { break; }
+        let body = length - 2;
+        if crc16_modbus(&buffer[..body]) != u16::from_le_bytes([buffer[body], buffer[body + 1]]) {
+            buffer.clear();
+            break;
+        }
+        frames.push(buffer.drain(..length).collect());
+    }
+    frames
+}
+
+fn modbus_rtu_server_response(packet: &[u8], unit: u8, memory: &Arc<Mutex<ModbusMemory>>) -> Result<Vec<u8>, String> {
+    if packet.len() < 4 || (packet[0] != unit && packet[0] != 0) { return Ok(Vec::new()); }
+    let body = packet.len() - 2;
+    if crc16_modbus(&packet[..body]) != u16::from_le_bytes([packet[body], packet[body + 1]]) { return Err("Invalid RTU CRC".into()); }
+    if packet[0] == 0 && !matches!(packet[1], 5 | 6 | 15 | 16) { return Ok(Vec::new()); }
+    let mut tcp = vec![0, 0, 0, 0];
+    tcp.extend_from_slice(&(body as u16).to_be_bytes());
+    tcp.extend_from_slice(&packet[..body]);
+    let response = modbus_server_response(&tcp, memory)?;
+    if packet[0] == 0 { return Ok(Vec::new()); }
+    let mut response = response[6..].to_vec();
+    response.extend_from_slice(&crc16_modbus(&response).to_le_bytes());
+    Ok(response)
+}
+
 #[tauri::command]
 pub async fn protocol_modbus_rtu(req: ModbusRtuRequest) -> Result<Value, String> {
     tokio::task::spawn_blocking(move || {
+        if !(1..=247).contains(&req.unit_id) { return Err("RTU client unit must be 1-247; broadcast is not supported".into()); }
         let mut frame = vec![req.unit_id];
         frame.extend_from_slice(&modbus_pdu(req.function, req.address, req.quantity, req.values.as_deref())?);
         frame.extend_from_slice(&crc16_modbus(&frame).to_le_bytes());
         let wait = timeout(req.timeout_ms);
-        let mut builder = serialport::new(&req.port_name, req.baud_rate).timeout(wait);
-        builder = builder
-            .data_bits(match req.data_bits.unwrap_or(8) { 5=>serialport::DataBits::Five, 6=>serialport::DataBits::Six, 7=>serialport::DataBits::Seven, _=>serialport::DataBits::Eight })
-            .stop_bits(if req.stop_bits == Some(2) { serialport::StopBits::Two } else { serialport::StopBits::One })
-            .parity(match req.parity.as_deref().unwrap_or("none").to_ascii_lowercase().as_str() { "odd"=>serialport::Parity::Odd, "even"=>serialport::Parity::Even, _=>serialport::Parity::None });
+        let builder = modbus_serial_builder(&req.port_name, req.baud_rate, req.data_bits, req.stop_bits, req.parity.as_deref(), wait)?;
         let mut port = builder.open().map_err(|error| format!("打开串口 {} 失败：{error}", req.port_name))?;
         let started = Instant::now();
+        let deadline = started + wait;
         port.write_all(&frame).map_err(|error| format!("串口发送失败：{error}"))?;
-        let mut received = vec![0_u8; 512];
-        let size = match port.read(&mut received) { Ok(size)=>size, Err(error) if error.kind()==std::io::ErrorKind::TimedOut=>0, Err(error)=>return Err(format!("串口接收失败：{error}")) };
-        received.truncate(size);
-        if received.len() >= 2 {
-            let body_len = received.len() - 2;
-            let actual = u16::from_le_bytes([received[body_len], received[body_len + 1]]);
-            if crc16_modbus(&received[..body_len]) != actual { return Err("Modbus RTU 响应 CRC 校验失败".into()); }
-        }
+        let received = read_modbus_frame(|buffer, wait| {
+            port.set_timeout(wait).map_err(std::io::Error::other)?;
+            port.read(buffer)
+        }, deadline, true).map_err(|error| format!("{error}; TX={}", hex(&frame)))?;
+        let parsed = parse_modbus_rtu_response(&frame, &received)
+            .map_err(|error| format!("{error}; TX={}; RX={}", hex(&frame), hex(&received)))?;
         let mut result = exchange_result(&frame, &received, started.elapsed(), req.port_name, "utf-8");
+        result.as_object_mut().unwrap().extend(parsed.as_object().unwrap().clone());
         result["protocol"] = json!("Modbus RTU");
+        result["unit_id"] = json!(req.unit_id);
         Ok(result)
     }).await.map_err(|error| format!("Modbus RTU 任务失败：{error}"))?
 }
@@ -765,10 +892,29 @@ fn modbus_exception(frame: &[u8], function: u8, code: u8) -> Vec<u8> {
 }
 
 fn modbus_server_response(frame: &[u8], memory: &Arc<Mutex<ModbusMemory>>) -> Result<Vec<u8>, String> {
-    if frame.len() < 8 { return Err("Modbus 请求过短".into()); }
+    if !(8..=260).contains(&frame.len()) { return Err("Invalid Modbus request length".into()); }
+    if frame[2..4] != [0, 0] || u16::from_be_bytes([frame[4], frame[5]]) as usize + 6 != frame.len() {
+        return Err("Invalid Modbus MBAP header".into());
+    }
     let function = frame[7];
+    if !matches!(function, 1..=6 | 15 | 16) { return Ok(modbus_exception(frame, function, 1)); }
+    if (function <= 6 && frame.len() != 12) || (function >= 15 && frame.len() < 13) {
+        return Ok(modbus_exception(frame, function, 3));
+    }
     let address = frame.get(8..10).map(|v| u16::from_be_bytes([v[0], v[1]]) as usize).unwrap_or(0);
     let quantity = frame.get(10..12).map(|v| u16::from_be_bytes([v[0], v[1]]) as usize).unwrap_or(0);
+    // Validate the entire write before locking or mutating the shared data areas.
+    if matches!(function, 1..=4 | 15 | 16) {
+        let limit = match function { 1 | 2 => 2000, 3 | 4 => 125, 15 => 1968, _ => 123 };
+        if quantity == 0 || quantity > limit { return Ok(modbus_exception(frame, function, 3)); }
+        if address + quantity > 65_536 { return Ok(modbus_exception(frame, function, 2)); }
+    }
+    if function == 15 || function == 16 {
+        let expected = if function == 15 { quantity.div_ceil(8) } else { quantity * 2 };
+        if frame[12] as usize != expected || frame.len() != 13 + expected {
+            return Ok(modbus_exception(frame, function, 3));
+        }
+    }
     let mut data = memory.lock().map_err(|_| "Modbus 内存锁异常")?;
     let mut pdu = vec![function];
     let invalid_range = |start: usize, count: usize| count == 0 || start.checked_add(count).is_none_or(|end| end > 65_536);
@@ -853,8 +999,9 @@ pub fn protocol_server_start(app: AppHandle, state: State<'_, ProtocolServerStat
     if kind == "modbus_rtu" {
         let port_name = req.serial_port.filter(|value| !value.trim().is_empty()).ok_or("请选择 Modbus RTU Server 串口")?;
         let wait = Duration::from_millis(200);
-        let mut builder = serialport::new(&port_name, req.baud_rate.unwrap_or(9_600)).timeout(wait);
-        builder = builder.parity(match req.parity.as_deref().unwrap_or("none").to_ascii_lowercase().as_str() { "odd"=>serialport::Parity::Odd, "even"=>serialport::Parity::Even, _=>serialport::Parity::None });
+        let unit = req.unit_id.unwrap_or(1);
+        if !(1..=247).contains(&unit) { return Err("RTU server unit must be 1-247".into()); }
+        let builder = modbus_serial_builder(&port_name, req.baud_rate.unwrap_or(9_600), req.data_bits, req.stop_bits, req.parity.as_deref(), wait)?;
         let mut serial = builder.open().map_err(|error| format!("打开 RTU Server 串口 {port_name} 失败：{error}"))?;
         insert_server(&state, &kind, port_name.clone(), running.clone(), requests.clone(), clients.clone(), client_stats.clone())?;
         let memory = state.memory.clone();
@@ -864,28 +1011,26 @@ pub fn protocol_server_start(app: AppHandle, state: State<'_, ProtocolServerStat
         std::thread::spawn(move || {
             let _ = app.emit("protocol-server:status", json!({"kind":thread_kind,"running":true,"address":port_name}));
             let mut received = vec![0_u8; 256];
+            let mut frame_buffer = Vec::new();
             while thread_running.load(Ordering::Relaxed) {
-                let size = match serial.read(&mut received) { Ok(size)=>size, Err(error) if error.kind()==std::io::ErrorKind::TimedOut=>continue, Err(_)=>break };
-                if size < 4 { continue; }
-                let packet = &received[..size];
-                let body_len = size - 2;
-                let actual_crc = u16::from_le_bytes([packet[body_len], packet[body_len + 1]]);
-                if crc16_modbus(&packet[..body_len]) != actual_crc { continue; }
-                requests.fetch_add(1, Ordering::Relaxed);
-                let unit = packet[0]; let pdu = &packet[1..body_len];
-                let mut tcp_frame = vec![0, 1, 0, 0];
-                tcp_frame.extend_from_slice(&((pdu.len() + 1) as u16).to_be_bytes());
-                tcp_frame.push(unit); tcp_frame.extend_from_slice(pdu);
-                let tcp_response = modbus_server_response(&tcp_frame, &memory).unwrap_or_default();
-                let mut sent = if tcp_response.len() >= 8 { tcp_response[6..].to_vec() } else { Vec::new() };
-                if !sent.is_empty() { sent.extend_from_slice(&crc16_modbus(&sent).to_le_bytes()); let _ = serial.write_all(&sent); }
-                emit_server_event(&app, &thread_kind, SocketAddr::from(([127,0,0,1],0)), packet, &sent, &thread_text_encoding, "rtu");
+                let size = match serial.read(&mut received) {
+                    Ok(size) => size,
+                    Err(error) if error.kind() == std::io::ErrorKind::TimedOut => { frame_buffer.clear(); continue; }
+                    Err(_) => break,
+                };
+                for packet in drain_rtu_requests(&mut frame_buffer, &received[..size]) {
+                    if packet[0] != unit && packet[0] != 0 { continue; }
+                    requests.fetch_add(1, Ordering::Relaxed);
+                    let sent = modbus_rtu_server_response(&packet, unit, &memory).unwrap_or_default();
+                    if !sent.is_empty() { let _ = serial.write_all(&sent); }
+                    emit_server_event(&app, &thread_kind, SocketAddr::from(([127,0,0,1],0)), &packet, &sent, &thread_text_encoding, "rtu");
+                }
             }
             thread_running.store(false, Ordering::Relaxed);
             let _ = app.emit("protocol-server:status", json!({"kind":thread_kind,"running":false}));
         });
     } else if kind.ends_with("tcp") || kind == "tcp" {
-        let framing = tcp_framing(req.framing_mode.as_deref(), req.frame_delimiter_hex.as_deref(), req.fixed_frame_length, if kind == "modbus_tcp" { "modbus_tcp" } else { "raw" })?;
+        let framing = if kind == "modbus_tcp" { TcpFraming::ModbusTcp } else { tcp_framing(req.framing_mode.as_deref(), req.frame_delimiter_hex.as_deref(), req.fixed_frame_length, "raw")? };
         let listener = TcpListener::bind((&*req.host, req.port)).map_err(|error| format!("绑定 {address} 失败：{error}"))?;
         listener.set_nonblocking(true).map_err(|error| error.to_string())?;
         insert_server(&state, &kind, address.clone(), running.clone(), requests.clone(), clients.clone(), client_stats.clone())?;
@@ -1139,6 +1284,150 @@ pub fn protocol_workbench_catalog() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tcp_adu(pdu: &[u8]) -> Vec<u8> {
+        let mut frame = vec![0, 7, 0, 0];
+        frame.extend_from_slice(&((pdu.len() + 1) as u16).to_be_bytes());
+        frame.push(1);
+        frame.extend_from_slice(pdu);
+        frame
+    }
+
+    fn rtu_adu(unit: u8, pdu: &[u8]) -> Vec<u8> {
+        let mut frame = vec![unit];
+        frame.extend_from_slice(pdu);
+        frame.extend_from_slice(&crc16_modbus(&frame).to_le_bytes());
+        frame
+    }
+
+    #[test]
+    fn modbus_rejects_invalid_requests_without_clamping() {
+        assert_eq!(modbus_pdu(5, 0, Some(1), Some(&[1])).unwrap(), [5, 0, 0, 255, 0]);
+        assert_eq!(modbus_pdu(5, 0, None, Some(&[0xFF00])).unwrap(), [5, 0, 0, 255, 0]);
+        assert_eq!(modbus_pdu(5, 0, None, Some(&[0])).unwrap(), [5, 0, 0, 0, 0]);
+        assert_eq!(modbus_pdu(15, 0, None, Some(&[1, 0, 1])).unwrap(), [15, 0, 0, 0, 3, 1, 5]);
+        for (fc, address, count, values) in [
+            (3, 0, 126, vec![]), (1, 0, 0, vec![]), (1, 65535, 2, vec![]),
+            (5, 0, 1, vec![2]), (6, 0, 1, vec![]), (6, 0, 1, vec![1, 2]),
+            (15, 0, 2, vec![1]), (15, 0, 1, vec![2]), (16, 65535, 2, vec![1, 2]),
+        ] { assert!(modbus_pdu(fc, address, Some(count), Some(&values)).is_err()); }
+    }
+
+    #[test]
+    fn modbus_response_identity_lengths_and_echo_are_strict() {
+        let request = tcp_adu(&[1, 0, 0, 0, 24]);
+        let response = tcp_adu(&[1, 3, 1, 0, 0]);
+        assert_eq!(parse_modbus_tcp_response(&request, &response).unwrap()["bits"].as_array().unwrap().len(), 24);
+        assert!(parse_modbus_tcp_response(&request, &tcp_adu(&[1, 1, 0])).is_err());
+        for index in [0, 2, 4, 6, 7, 8] {
+            let mut invalid = response.clone();
+            invalid[index] ^= 1;
+            assert!(parse_modbus_tcp_response(&request, &invalid).is_err(), "index {index}");
+        }
+        for length in 0..response.len() { assert!(parse_modbus_tcp_response(&request, &response[..length]).is_err()); }
+        assert!(parse_modbus_response(&[3, 0, 0, 0, 1], &[3, 4, 0, 1, 0, 2]).is_err());
+        for fc in [5, 6, 15, 16] {
+            let request = modbus_pdu(fc, 8, Some(1), Some(&[1])).unwrap();
+            assert!(parse_modbus_response(&request, &request[..5]).is_ok());
+            let mut wrong = request[..5].to_vec();
+            wrong[4] ^= 1;
+            assert!(parse_modbus_response(&request, &wrong).is_err());
+            assert!(parse_modbus_response(&request, &[fc | 0x80, 2]).unwrap_err().contains("exception"));
+        }
+    }
+
+    #[test]
+    fn malformed_server_writes_do_not_mutate_or_poison_memory() {
+        let memory = ProtocolServerState::default().memory;
+        for pdu in [vec![15, 0, 0, 0, 24, 1, 255], vec![16, 0, 0, 0, 2, 2, 0, 42], vec![5, 0, 0, 0, 1], vec![6, 0, 0], vec![3, 0, 0, 0, 126]] {
+            let response = modbus_server_response(&tcp_adu(&pdu), &memory).unwrap();
+            assert_eq!(response[7], pdu[0] | 0x80);
+            assert_eq!(response[8], 3);
+            let data = memory.lock().unwrap();
+            assert!(!data.coils[0]);
+            assert_eq!(data.holding_registers[0], 0);
+        }
+        let valid = tcp_adu(&modbus_pdu(5, 2, None, Some(&[1])).unwrap());
+        assert_eq!(modbus_server_response(&valid, &memory).unwrap(), valid);
+        assert!(memory.lock().unwrap().coils[2]);
+        let mut invalid = valid.clone();
+        invalid[5] -= 1;
+        assert!(modbus_server_response(&invalid, &memory).is_err());
+        let mut buffer = Vec::new();
+        assert!(drain_tcp_frames(&mut buffer, &[0, 1, 0, 0, 255, 255, 1], &TcpFraming::ModbusTcp).is_empty());
+        assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn modbus_frame_reader_handles_byte_fragments_eof_and_deadline() {
+        for (frame, rtu) in [(tcp_adu(&[3, 2, 0, 42]), false), (rtu_adu(1, &[3, 2, 0, 42]), true), (rtu_adu(1, &[0x83, 2]), true)] {
+            let mut cursor = std::io::Cursor::new(frame.clone());
+            let received = read_modbus_frame(|buffer, _| cursor.read(&mut buffer[..1]), Instant::now() + Duration::from_secs(1), rtu).unwrap();
+            assert_eq!(received, frame);
+        }
+        assert!(read_modbus_frame(|_, _| Ok(0), Instant::now() + Duration::from_secs(1), false).is_err());
+        assert!(read_modbus_frame(|_, _| panic!("must not read"), Instant::now(), false).is_err());
+    }
+
+    #[test]
+    fn modbus_tcp_real_socket_fragmentation_and_timeout() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            let mut request = [0; 12];
+            stream.read_exact(&mut request).unwrap();
+            let mut response = tcp_adu(&[3, 2, 0x12, 0x34]);
+            response[..2].copy_from_slice(&request[..2]);
+            for byte in response { stream.write_all(&[byte]).unwrap(); std::thread::sleep(Duration::from_millis(2)); }
+        });
+        let result = modbus_tcp_blocking(ModbusRequest { host:"127.0.0.1".into(), port, unit_id:1, function:3, address:0, quantity:Some(1), values:None, timeout_ms:Some(1000) });
+        server.join().unwrap();
+        assert_eq!(result.unwrap()["registers"], json!([0x1234]));
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            let mut request = [0; 12];
+            stream.read_exact(&mut request).unwrap();
+            for byte in [0, 1, 0, 0, 0, 5] {
+                if stream.write_all(&[byte]).is_err() { break; }
+                std::thread::sleep(Duration::from_millis(60));
+            }
+        });
+        let started = Instant::now();
+        let result = modbus_tcp_blocking(ModbusRequest { host:"127.0.0.1".into(), port, unit_id:1, function:3, address:0, quantity:Some(1), values:None, timeout_ms:Some(100) });
+        let elapsed = started.elapsed();
+        server.join().unwrap();
+        assert!(result.is_err());
+        assert!(elapsed < Duration::from_millis(300), "{elapsed:?}");
+    }
+
+    #[test]
+    fn rtu_validates_crc_identity_and_server_broadcasts() {
+        let request = rtu_adu(1, &[3, 0, 0, 0, 1]);
+        let response = rtu_adu(1, &[3, 2, 0, 42]);
+        assert_eq!(parse_modbus_rtu_response(&request, &response).unwrap()["registers"], json!([42]));
+        assert!(parse_modbus_rtu_response(&request, &rtu_adu(2, &[3, 2, 0, 42])).is_err());
+        assert!(parse_modbus_rtu_response(&request, &rtu_adu(1, &[4, 2, 0, 42])).is_err());
+        assert!(parse_modbus_rtu_response(&rtu_adu(1, &[1, 0, 0, 0, 24]), &rtu_adu(1, &[1, 1, 0])).is_err());
+        let mut invalid = response;
+        invalid[3] ^= 1;
+        assert!(parse_modbus_rtu_response(&request, &invalid).is_err());
+        let mut buffer = Vec::new();
+        assert!(drain_rtu_requests(&mut buffer, &request[..3]).is_empty());
+        let tail = [&request[3..], &request].concat();
+        assert_eq!(drain_rtu_requests(&mut buffer, &tail), vec![request.clone(), request]);
+        let memory = ProtocolServerState::default().memory;
+        assert!(modbus_rtu_server_response(&rtu_adu(2, &[6, 0, 0, 0, 7]), 1, &memory).unwrap().is_empty());
+        assert_eq!(memory.lock().unwrap().holding_registers[0], 0);
+        assert!(modbus_rtu_server_response(&rtu_adu(0, &[6, 0, 0, 0, 7]), 1, &memory).unwrap().is_empty());
+        assert_eq!(memory.lock().unwrap().holding_registers[0], 7);
+        assert!(!modbus_rtu_server_response(&rtu_adu(1, &[3, 0, 0, 0, 1]), 1, &memory).unwrap().is_empty());
+    }
     #[test]
     fn decodes_hex_and_builds_modbus_frames() {
         assert_eq!(decode_payload("01 03-00:00", Some("hex")).unwrap(), [1,3,0,0]);

@@ -88,6 +88,14 @@ const clampInteger = (value, min, max, fallback = min) => {
   const parsed = Number.parseInt(String(value), 10);
   return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
 };
+const requireInteger = (value, min, max, label) => {
+  const text = String(value).trim();
+  const parsed = Number(text);
+  if (!/^\d+$/.test(text) || !Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+    throw new Error(`${label}必须是 ${min}-${max} 范围内的整数`);
+  }
+  return parsed;
+};
 const isReadFunction = (value) => Number(value) >= 1 && Number(value) <= 4;
 const functionArea = (value) => {
   const fn = Number(value);
@@ -113,6 +121,10 @@ export default defineComponent({
     const copyState = ref("");
     let localSequence = 0;
     let statusTimer = null;
+    let disposed = false;
+    let statusPending = false;
+    let clientStatusVersion = 0;
+    let memoryToken = 0;
     const unlisteners = [];
     const previewStates = [];
     const saveKey = "network-toolbox.protocol-workbench.v5";
@@ -171,6 +183,7 @@ export default defineComponent({
       serialPort: ref(""),
       baudRate: ref("9600"),
       parity: ref("none"),
+      stopBits: ref("1"),
       timeoutMs: ref("2000"),
       unitId: ref("1"),
       fn: ref("3"),
@@ -187,6 +200,7 @@ export default defineComponent({
       error: ref(""),
       rows: ref([]),
       latest: ref(null),
+      lastRequest: null,
     });
     const makeModbusServer = (transport) => ({
       transport,
@@ -196,6 +210,8 @@ export default defineComponent({
       serialPort: ref(""),
       baudRate: ref("9600"),
       parity: ref("none"),
+      stopBits: ref("1"),
+      unitId: ref("1"),
       busy: ref(false),
       error: ref(""),
       latest: ref(null),
@@ -233,9 +249,9 @@ export default defineComponent({
       "tcp-server": ["host", "port", "framingMode", "delimiterHex", "fixedLength", "responseMode"],
       "udp-server": ["host", "port", "responseMode"],
       "modbus-tcp-client": ["host", "port", "timeoutMs", "unitId", "fn", "address", "addressMode", "quantity", "values", "format", "wordOrder", "pollMs"],
-      "modbus-rtu-client": ["serialPort", "baudRate", "parity", "timeoutMs", "unitId", "fn", "address", "addressMode", "quantity", "values", "format", "wordOrder", "pollMs"],
+      "modbus-rtu-client": ["serialPort", "baudRate", "parity", "stopBits", "timeoutMs", "unitId", "fn", "address", "addressMode", "quantity", "values", "format", "wordOrder", "pollMs"],
       "modbus-tcp-server": ["host", "port"],
-      "modbus-rtu-server": ["serialPort", "baudRate", "parity"],
+      "modbus-rtu-server": ["serialPort", "baudRate", "parity", "stopBits", "unitId"],
     };
 
     function payloadSnapshot(state) {
@@ -297,6 +313,7 @@ export default defineComponent({
     }
 
     function addTimeline(event) {
+      if (disposed) return;
       localSequence += 1;
       const item = {
         id: "event-" + localSequence,
@@ -394,14 +411,21 @@ export default defineComponent({
     }
 
     async function refreshStatus() {
+      if (disposed || statusPending) return;
+      statusPending = true;
+      const version = clientStatusVersion;
       try {
         const result = await invoke("protocol_server_status");
-        servers.value = result.servers || [];
         const client = await invoke("protocol_tcp_client_status");
+        if (disposed) return;
+        servers.value = result.servers || [];
+        if (tcpClient.busy.value || version !== clientStatusVersion) return;
         tcpClient.connected.value = Boolean(client.connected);
         tcpClient.peer.value = client.peer || "";
       } catch (cause) {
-        globalError.value = String(cause);
+        if (!disposed) globalError.value = String(cause);
+      } finally {
+        statusPending = false;
       }
     }
 
@@ -427,7 +451,7 @@ export default defineComponent({
     function parseModbusAddress(config) {
       const text = String(config.address.value).trim();
       if (!/^\d+$/.test(text)) throw new Error("地址必须是十进制整数");
-      if (config.addressMode.value === "zero") return clampInteger(text, 0, 65535, 0);
+      if (config.addressMode.value === "zero") return requireInteger(text, 0, 65535, "地址");
       const area = functionArea(config.fn.value);
       if (text.length >= 5) {
         if (Number(text[0]) !== areaPrefix(area)) throw new Error("PLC 地址前缀与功能码的数据区不一致");
@@ -456,10 +480,8 @@ export default defineComponent({
           if (/^(0|false|off|no|0000)$/i.test(token)) return 0;
           throw new Error(`无法识别线圈值：${token}`);
         }
-        const value = /^0x/i.test(token)
-          ? Number.parseInt(token.slice(2), 16)
-          : Number.parseInt(token, 10);
-        if (!Number.isFinite(value) || value < 0 || value > 65535) {
+        const value = /^(?:0x[0-9a-f]+|\d+)$/i.test(token) ? Number(token) : NaN;
+        if (!Number.isSafeInteger(value) || value < 0 || value > 65535) {
           throw new Error(`寄存器值超出 0-65535：${token}`);
         }
         return value;
@@ -514,34 +536,6 @@ export default defineComponent({
       return compact.match(/.{2}/g).map((item) => Number.parseInt(item, 16));
     }
 
-    function parseRtuResponse(result, fn, quantity) {
-      const bytes = bytesFromHex(result.received_hex);
-      if (!bytes.length) throw new Error("Modbus RTU 未收到响应");
-      if (bytes.length < 5) throw new Error("Modbus RTU 响应过短");
-      if ((bytes[1] & 0x80) !== 0) {
-        throw new Error(`Modbus 异常响应，功能码 ${bytes[1].toString(16).toUpperCase()}，异常码 ${bytes[2].toString(16).toUpperCase()}`);
-      }
-      if (fn === 1 || fn === 2) {
-        const bits = [];
-        for (let index = 0; index < quantity; index += 1) {
-          bits.push(Boolean(bytes[3 + Math.floor(index / 8)] & (1 << (index % 8))));
-        }
-        return { bits };
-      }
-      if (fn === 3 || fn === 4) {
-        const byteCount = bytes[2] || 0;
-        if (byteCount < quantity * 2 || bytes.length < byteCount + 5) {
-          throw new Error("Modbus RTU 寄存器响应长度不一致");
-        }
-        const registers = [];
-        for (let index = 0; index < quantity; index += 1) {
-          registers.push(((bytes[3 + index * 2] || 0) << 8) | (bytes[4 + index * 2] || 0));
-        }
-        return { registers };
-      }
-      return { write_ack: { address: (bytes[2] << 8) | bytes[3], quantity: fn === 5 || fn === 6 ? 1 : (bytes[4] << 8) | bytes[5] } };
-    }
-
     function buildModbusRows(config, result, address, quantity) {
       const fn = Number(config.fn.value);
       const area = functionArea(fn);
@@ -557,13 +551,13 @@ export default defineComponent({
       if (Array.isArray(result.registers)) {
         const perValue = registersPerValue(config.format.value);
         const rows = [];
-        for (let offset = 0; offset + perValue <= result.registers.length; offset += perValue) {
+        for (let offset = 0; offset < result.registers.length; offset += perValue) {
           const chunk = result.registers.slice(offset, offset + perValue);
           rows.push({
             address: address + offset,
             label: formatModbusAddress(address + offset, area, mode),
             raw: chunk.map((value) => `0x${Number(value).toString(16).toUpperCase().padStart(4, "0")}`).join(" "),
-            value: formatRegisters(chunk, config.format.value, config.wordOrder.value),
+            value: chunk.length < perValue ? `数据不足 (${chunk.length}/${perValue})` : formatRegisters(chunk, config.format.value, config.wordOrder.value),
           });
         }
         return rows;
@@ -572,6 +566,7 @@ export default defineComponent({
     }
 
     async function connectTcpClient() {
+      clientStatusVersion += 1;
       const config = tcpClient;
       config.busy.value = true;
       config.error.value = "";
@@ -595,6 +590,7 @@ export default defineComponent({
     }
 
     async function disconnectTcpClient() {
+      clientStatusVersion += 1;
       tcpClient.busy.value = true;
       tcpClient.error.value = "";
       try {
@@ -651,7 +647,7 @@ export default defineComponent({
         await invoke("protocol_server_start", { req: {
           kind: config.kind,
           host: isRtu ? "0.0.0.0" : config.host.value.trim(),
-          port: isRtu ? 0 : clampInteger(config.port.value, 1, 65535, 1502),
+          port: isRtu ? 0 : requireInteger(config.port.value, 1, 65535, "端口"),
           response: composer && config.responseMode.value === "fixed" ? composer.payload.value : "",
           response_mode: isModbus ? "none" : config.responseMode.value,
           response_input_mode: composer ? composer.inputMode.value : "hex",
@@ -666,8 +662,11 @@ export default defineComponent({
             ? clampInteger(config.fixedLength.value, 1, 65535, 8)
             : null,
           serial_port: isRtu ? config.serialPort.value : null,
-          baud_rate: isRtu ? clampInteger(config.baudRate.value, 300, 4000000, 9600) : null,
+          baud_rate: isRtu ? requireInteger(config.baudRate.value, 300, 4000000, "波特率") : null,
           parity: isRtu ? config.parity.value : null,
+          unit_id: isRtu ? requireInteger(config.unitId.value, 1, 247, "Unit ID") : null,
+          data_bits: isRtu ? 8 : null,
+          stop_bits: isRtu ? requireInteger(config.stopBits.value, 1, 2, "停止位") : null,
         }});
         await refreshStatus();
         const endpoint = isRtu ? config.serialPort.value : `${config.host.value}:${config.port.value}`;
@@ -731,61 +730,76 @@ export default defineComponent({
     }
 
     async function runModbus(config, sessionId) {
-      if (config.busy.value) return;
+      if (disposed || config.busy.value) return;
       config.busy.value = true;
       config.error.value = "";
       try {
-        const fn = clampInteger(config.fn.value, 1, 16, 3);
+        const fn = requireInteger(config.fn.value, 1, 16, "功能码");
+        if (!MODBUS_FUNCTIONS.some(([value]) => value === fn)) throw new Error("不支持的功能码");
         const address = parseModbusAddress(config);
         const read = isReadFunction(fn);
         let values = [];
         let quantity;
         if (read) {
           const limit = fn <= 2 ? 2000 : 125;
-          quantity = clampInteger(config.quantity.value, 1, limit, 10);
+          quantity = requireInteger(config.quantity.value, 1, limit, "数量");
         } else {
           values = parseModbusValues(config.values.value, fn === 5 || fn === 15);
-          if (fn === 5 || fn === 6) values = values.slice(0, 1);
+          if ((fn === 5 || fn === 6) && values.length !== 1) throw new Error("单点写入必须且只能提供一个值");
           quantity = fn === 5 || fn === 6 ? 1 : values.length;
           if (fn === 15 && quantity > 1968) throw new Error("FC0F 最多写入 1968 个线圈");
           if (fn === 16 && quantity > 123) throw new Error("FC10 最多写入 123 个寄存器");
         }
+        if (address + quantity > 65536) throw new Error("请求地址范围超出 65535");
+        const snapshot = { fn: { value: fn }, addressMode: { value: config.addressMode.value }, address, quantity };
         const base = {
-          unit_id: clampInteger(config.unitId.value, 1, 247, 1),
+          unit_id: requireInteger(config.unitId.value, config.transport === "tcp" ? 0 : 1, config.transport === "tcp" ? 255 : 247, "Unit ID"),
           function: fn,
           address,
           quantity,
           values,
-          timeout_ms: clampInteger(config.timeoutMs.value, 100, 30000, 2000),
+          timeout_ms: requireInteger(config.timeoutMs.value, 100, 30000, "超时"),
         };
         const command = config.transport === "tcp" ? "protocol_modbus_tcp" : "protocol_modbus_rtu";
         const req = config.transport === "tcp"
-          ? { ...base, host: config.host.value.trim(), port: clampInteger(config.port.value, 1, 65535, 1502) }
+          ? { ...base, host: config.host.value.trim(), port: requireInteger(config.port.value, 1, 65535, "端口") }
           : {
               ...base,
               port_name: config.serialPort.value,
-              baud_rate: clampInteger(config.baudRate.value, 300, 4000000, 9600),
+              baud_rate: requireInteger(config.baudRate.value, 300, 4000000, "波特率"),
               data_bits: 8,
-              stop_bits: 1,
+              stop_bits: requireInteger(config.stopBits.value, 1, 2, "停止位"),
               parity: config.parity.value,
             };
         if (config.transport === "rtu" && !req.port_name) throw new Error("请选择 Modbus RTU 串口");
-        const rawResult = await invoke(command, { req });
-        const parsed = config.transport === "rtu" ? parseRtuResponse(rawResult, fn, quantity) : rawResult;
-        const result = { ...rawResult, ...parsed };
-        config.latest.value = result;
-        config.rows.value = buildModbusRows(config, result, address, quantity);
+        if (config.transport === "tcp" && !req.host) throw new Error("目标主机不能为空");
+        const result = await invoke(command, { req });
+        if (disposed) return;
+        if (Number(config.fn.value) === fn) {
+          config.latest.value = result;
+          config.lastRequest = snapshot;
+          refreshModbusRows(config);
+        }
         const functionText = `FC${fn.toString(16).toUpperCase().padStart(2, "0")}`;
         addExchange(sessionId, result, `${functionText} ${read ? "读取" : "写入"}完成`);
-        if (!read) addTimeline({ sessionId, direction: "sys", summary: `${functionText} 写入确认 · 地址 ${formatModbusAddress(address, functionArea(fn), config.addressMode.value)} · ${quantity} 点` });
+        if (!read) addTimeline({ sessionId, direction: "sys", summary: `${functionText} 写入确认 · 地址 ${formatModbusAddress(address, functionArea(fn), snapshot.addressMode.value)} · ${quantity} 点` });
       } catch (cause) {
+        stopPolling(config);
         config.error.value = reportError(sessionId, cause, "Modbus 请求失败");
       } finally {
         config.busy.value = false;
       }
     }
 
+    function refreshModbusRows(config) {
+      persist();
+      if (!config.lastRequest || !config.latest.value) return;
+      const snapshot = { ...config.lastRequest, format: config.format, wordOrder: config.wordOrder };
+      config.rows.value = buildModbusRows(snapshot, config.latest.value, snapshot.address, snapshot.quantity);
+    }
+
     async function togglePolling(config, sessionId) {
+      if (disposed) return;
       if (config.polling.value) {
         stopPolling(config);
         addTimeline({ sessionId, direction: "sys", summary: "轮询已停止" });
@@ -795,53 +809,78 @@ export default defineComponent({
         config.error.value = "写功能码不能启动周期轮询";
         return;
       }
+      let interval;
+      try { interval = requireInteger(config.pollMs.value, 100, 60000, "轮询周期"); }
+      catch (cause) { config.error.value = String(cause); return; }
       config.polling.value = true;
-      addTimeline({ sessionId, direction: "sys", summary: `轮询已启动 · ${clampInteger(config.pollMs.value, 100, 60000, 500)} ms` });
+      addTimeline({ sessionId, direction: "sys", summary: `轮询已启动 · ${interval} ms` });
       await runModbus(config, sessionId);
-      if (!config.polling.value) return;
+      if (disposed || !config.polling.value) return;
       config.pollTimer = setInterval(
-        () => runModbus(config, sessionId),
-        clampInteger(config.pollMs.value, 100, 60000, 500),
+        () => {
+          if (disposed || !isReadFunction(config.fn.value)) { stopPolling(config); return; }
+          runModbus(config, sessionId);
+        },
+        interval,
       );
     }
 
     async function refreshMemory() {
+      if (disposed) return;
+      const token = ++memoryToken;
+      const area = memoryArea.value;
+      const startText = memoryStart.value;
+      const countText = memoryCount.value;
+      const isCurrent = () => !disposed && token === memoryToken && area === memoryArea.value && startText === memoryStart.value && countText === memoryCount.value;
+      if (memoryRows.value.some((row) => row.area !== area)) memoryRows.value = [];
       memoryBusy.value = true;
       memoryError.value = "";
       try {
-        const start = clampInteger(memoryStart.value, 0, 65535, 0);
-        const count = Math.min(clampInteger(memoryCount.value, 1, 256, 20), 65536 - start);
+        const start = requireInteger(startText, 0, 65535, "起始地址");
+        const count = requireInteger(countText, 1, 256, "数量");
+        if (start + count > 65536) throw new Error("数据区地址范围超出 65535");
         const result = await invoke("protocol_server_get_memory", {
-          area: memoryArea.value,
+          area,
           address: start,
           quantity: count,
         });
+        if (!isCurrent()) return;
         memoryRows.value = (result.values || []).map((value, index) => ({
+          area,
           address: start + index,
-          label: formatModbusAddress(start + index, memoryArea.value, "zero"),
+          label: formatModbusAddress(start + index, area, "zero"),
           value: Number(value) || 0,
+          writing: false,
         }));
       } catch (cause) {
-        memoryError.value = String(cause);
+        if (isCurrent()) memoryError.value = String(cause);
       } finally {
-        memoryBusy.value = false;
+        if (token === memoryToken) memoryBusy.value = false;
       }
     }
 
     async function writeMemory(row, value) {
+      if (disposed || row.writing || row.area !== memoryArea.value) return;
       memoryError.value = "";
-      const isBit = memoryArea.value === "coil" || memoryArea.value === "discrete";
-      const normalized = isBit ? (value ? 1 : 0) : clampInteger(value, 0, 65535, row.value);
+      const area = row.area;
+      const sessionId = activeSession.value;
+      const isBit = area === "coil" || area === "discrete";
+      row.writing = true;
       try {
+        const normalized = isBit ? (value ? 1 : 0) : requireInteger(value, 0, 65535, "寄存器值");
         await invoke("protocol_server_set_memory", { req: {
-          area: memoryArea.value,
+          area,
           address: row.address,
           values: [normalized],
         }});
         row.value = normalized;
-        addTimeline({ sessionId: activeSession.value, direction: "sys", summary: `数据区 ${memoryArea.value} · ${row.address} = ${normalized}` });
+        addTimeline({ sessionId, direction: "sys", summary: `数据区 ${area} · ${row.address} = ${normalized}` });
+        if (!disposed && area === memoryArea.value) await refreshMemory();
       } catch (cause) {
-        memoryError.value = reportError(activeSession.value, cause, "数据区写入失败");
+        const message = reportError(sessionId, cause, "数据区写入失败");
+        if (!disposed && area === memoryArea.value) memoryError.value = message;
+      } finally {
+        row.writing = false;
       }
     }
 
@@ -931,10 +970,15 @@ export default defineComponent({
     }
 
     async function bindListeners() {
-      unlisteners.push(await listen("protocol-client:event", (event) => {
+      const bind = async (name, callback) => {
+        if (disposed) return;
+        const unlisten = await listen(name, (event) => { if (!disposed) callback(event); });
+        if (disposed) unlisten();
+        else unlisteners.push(unlisten);
+      };
+      await bind("protocol-client:event", (event) => {
         const item = event.payload || {};
-        tcpClient.connected.value = true;
-        tcpClient.peer.value = item.peer || tcpClient.peer.value;
+        tcpClient.latest.value = { ...tcpClient.latest.value, ...item, elapsed_ms: null };
         addTimeline({
           sequence: item.sequence,
           timestamp_ms: item.timestamp_ms,
@@ -946,13 +990,9 @@ export default defineComponent({
           text: item.received_text,
           summary: `TCP 收到 ${item.received_bytes || 0} B · ${item.kind || "raw"}`,
         });
-      }));
-      unlisteners.push(await listen("protocol-client:status", (event) => {
-        tcpClient.connected.value = Boolean(event.payload?.connected);
-        tcpClient.peer.value = event.payload?.peer || "";
-        if (!tcpClient.connected.value) addTimeline({ sessionId: "tcp-client", direction: "sys", summary: "TCP 连接已关闭" });
-      }));
-      unlisteners.push(await listen("protocol-server:event", (event) => {
+      });
+      await bind("protocol-client:status", refreshStatus);
+      await bind("protocol-server:event", (event) => {
         const item = event.payload || {};
         const sessionId = SERVER_SESSION[item.kind];
         if (!sessionId) return;
@@ -986,23 +1026,27 @@ export default defineComponent({
         }
         refreshStatus();
         if (item.kind.startsWith("modbus_")) refreshMemory();
-      }));
-      unlisteners.push(await listen("protocol-server:status", refreshStatus));
-      unlisteners.push(await listen("protocol-server:client", refreshStatus));
+      });
+      await bind("protocol-server:status", refreshStatus);
+      await bind("protocol-server:client", refreshStatus);
     }
 
     onMounted(async () => {
       restore();
       await Promise.all([refreshStatus(), refreshSerialPorts(), refreshMemory()]);
+      if (disposed) return;
       await Promise.all(previewStates.map((state) => refreshPreview(state)));
+      if (disposed) return;
       try { await bindListeners(); } catch (cause) { globalError.value = String(cause); }
-      statusTimer = setInterval(refreshStatus, 1200);
+      if (!disposed) statusTimer = setInterval(refreshStatus, 1200);
     });
 
     onBeforeUnmount(() => {
+      disposed = true;
+      memoryToken += 1;
       persist();
       if (statusTimer) clearInterval(statusTimer);
-      previewStates.forEach((state) => { if (state.timer) clearTimeout(state.timer); });
+      previewStates.forEach((state) => { state.token += 1; if (state.timer) clearTimeout(state.timer); });
       [modbusTcpClient, modbusRtuClient].forEach(stopPolling);
       unlisteners.splice(0).forEach((unlisten) => { if (typeof unlisten === "function") unlisten(); });
     });
@@ -1089,20 +1133,24 @@ export default defineComponent({
     }
 
     function endpointFields(config) {
+      const disabled = config.busy.value || Boolean(config.kind && serverFor(config.kind));
       if (config.transport === "rtu" || config.kind === "modbus_rtu") {
         const options = serialPorts.value.length
           ? serialPorts.value.map((item) => [item.name, item.description ? `${item.name} · ${item.description}` : item.name])
           : [["", "未发现串口"]];
         return [
-          field("串口", selectInput(config.serialPort, options), "span-2"),
-          field("波特率", textInput(config.baudRate, { type: "number", min: "300", max: "4000000" })),
-          field("校验", selectInput(config.parity, [["none", "None"], ["even", "Even"], ["odd", "Odd"]])),
-          commandButton("刷新串口", refreshSerialPorts, { compact: true }),
+          field("串口", selectInput(config.serialPort, options, { disabled, onChange: persist }), "span-2"),
+          field("波特率", textInput(config.baudRate, { type: "number", min: "300", max: "4000000", disabled, onInput: persist })),
+          field("校验", selectInput(config.parity, [["none", "None"], ["even", "Even"], ["odd", "Odd"]], { disabled, onChange: persist })),
+          field("数据位", selectInput({ value: "8" }, [["8", "8"]], { disabled: true })),
+          field("停止位", selectInput(config.stopBits, [["1", "1"], ["2", "2"]], { disabled, onChange: persist })),
+          ...(config.kind === "modbus_rtu" ? [field("Unit ID", textInput(config.unitId, { type: "number", min: "1", max: "247", disabled, onInput: persist }))] : []),
+          commandButton("刷新串口", refreshSerialPorts, { compact: true, disabled }),
         ];
       }
       return [
-        field(config.kind === "tcp" || config.kind === "udp" ? "主机" : "目标主机", textInput(config.host, { spellcheck: false }), "span-2"),
-        field("端口", textInput(config.port, { type: "number", min: "1", max: "65535" })),
+        field(config.kind === "tcp" || config.kind === "udp" ? "主机" : "目标主机", textInput(config.host, { spellcheck: false, disabled, onInput: persist }), "span-2"),
+        field("端口", textInput(config.port, { type: "number", min: "1", max: "65535", disabled, onInput: persist })),
       ];
     }
 
@@ -1171,7 +1219,7 @@ export default defineComponent({
       return h("div", { class: "pw4-result-strip" }, [
         h("span", null, [h("b", null, `${result.sent_bytes || 0} B`), " TX"]),
         h("span", { class: received ? "good" : "" }, [h("b", null, `${received} B`), " RX"]),
-        h("span", null, [h("b", null, `${result.elapsed_ms || 0} ms`), " RTT"]),
+        h("span", null, [h("b", null, result.elapsed_ms == null ? "—" : `${result.elapsed_ms} ms`), " 耗时"]),
         h("code", { title: result.peer || "" }, result.peer || "—"),
       ]);
     }
@@ -1423,15 +1471,15 @@ export default defineComponent({
             segmented(config.addressMode, [["zero", "0 基址"], ["plc", "PLC 地址"]], persist, "small"),
           ]),
           h("div", { class: "pw4-form-grid request-grid" }, [
-            field("Unit ID", textInput(config.unitId, { type: "number", min: "1", max: "247", onInput: persist })),
-            field("功能码", selectInput(config.fn, MODBUS_FUNCTIONS, { onChange: () => { stopPolling(config); config.rows.value = []; persist(); } }), "span-2"),
+            field("Unit ID", textInput(config.unitId, { type: "number", min: config.transport === "tcp" ? "0" : "1", max: config.transport === "tcp" ? "255" : "247", onInput: persist })),
+            field("功能码", selectInput(config.fn, MODBUS_FUNCTIONS, { onChange: () => { stopPolling(config); config.rows.value = []; config.lastRequest = null; config.latest.value = null; persist(); } }), "span-2"),
             field("起始地址", textInput(config.address, { inputmode: "numeric", spellcheck: false, onInput: persist }), "span-2"),
             read
               ? field("数量", textInput(config.quantity, { type: "number", min: "1", max: fn <= 2 ? "2000" : "125", onInput: persist }))
               : field("写入值", textInput(config.values, { spellcheck: false, placeholder: bitFunction ? "0, 1, 1, 0" : "0, 100, 0x00FF", onInput: persist }), "span-3"),
-            read && !bitFunction ? field("显示格式", selectInput(config.format, DATA_FORMATS, { onChange: persist }), "span-2") : null,
+            read && !bitFunction ? field("显示格式", selectInput(config.format, DATA_FORMATS, { onChange: () => refreshModbusRows(config) }), "span-2") : null,
             read && !bitFunction && registersPerValue(config.format.value) > 1
-              ? field("字节 / 字序", selectInput(config.wordOrder, WORD_ORDERS, { onChange: persist }), "span-2")
+              ? field("字节 / 字序", selectInput(config.wordOrder, WORD_ORDERS, { onChange: () => refreshModbusRows(config) }), "span-2")
               : null,
             read ? field("轮询周期 (ms)", textInput(config.pollMs, { type: "number", min: "100", max: "60000", onInput: persist })) : null,
           ].filter(Boolean)),
@@ -1452,17 +1500,21 @@ export default defineComponent({
     }
 
     function memoryValueEditor(row) {
-      const bitArea = memoryArea.value === "coil" || memoryArea.value === "discrete";
+      const bitArea = row.area === "coil" || row.area === "discrete";
       if (bitArea) {
-        return toggleControl(row.value ? "ON" : "OFF", Boolean(row.value), (checked) => writeMemory(row, checked));
+        return toggleControl(row.value ? "ON" : "OFF", Boolean(row.value), (checked) => writeMemory(row, checked), row.writing);
       }
       return h("input", {
         type: "number",
         min: "0",
         max: "65535",
         value: row.value,
-        onInput: (event) => { row.value = event.target.value; },
-        onChange: (event) => writeMemory(row, event.target.value),
+        disabled: row.writing,
+        onChange: async (event) => {
+          const input = event.target;
+          await writeMemory(row, input.value);
+          input.value = row.value;
+        },
       });
     }
 
@@ -1472,7 +1524,7 @@ export default defineComponent({
             h("thead", null, [h("tr", null, [h("th", null, "偏移地址"), h("th", null, "参考地址"), h("th", null, "模拟值")])]) ,
             h("tbody", null, memoryRows.value.map((row) => h("tr", null, [
               h("td", null, [h("code", null, String(row.address))]),
-              h("td", null, [h("code", { class: "muted" }, formatModbusAddress(row.address, memoryArea.value, "plc"))]),
+              h("td", null, [h("code", { class: "muted" }, formatModbusAddress(row.address, row.area, "plc"))]),
               h("td", null, [memoryValueEditor(row)]),
             ]))),
           ])]
@@ -1502,7 +1554,7 @@ export default defineComponent({
             server
               ? commandButton(config.busy.value ? "停止中" : "停止 Server", () => stopServer(config, sessionId), { kind: "danger", disabled: config.busy.value })
               : commandButton(config.busy.value ? "启动中" : "启动 Server", () => startServer(config, sessionId), { kind: "primary", disabled: config.busy.value }),
-            server ? statusBadge("online", "响应所有 Unit ID") : null,
+            server ? statusBadge("online", isTcp ? "响应所有 Unit ID" : `Unit ID ${config.unitId.value}`) : null,
           ].filter(Boolean)),
         ]),
         h("section", { class: "pw4-memory" }, [
