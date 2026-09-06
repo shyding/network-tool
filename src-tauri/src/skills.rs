@@ -88,11 +88,11 @@ fn webhook(url: String, body: Value) -> Result<bool, String> {
         ))
     }
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn send_feishu_webhook(url: String, text: String) -> Result<bool, String> {
     webhook(url, json!({"msg_type":"text","content":{"text":text}}))
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn send_wecom_webhook(url: String, text: String) -> Result<bool, String> {
     webhook(url, json!({"msgtype":"text","text":{"content":text}}))
 }

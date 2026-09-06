@@ -64,7 +64,7 @@ pub async fn firewall_snapshot() -> Result<Value, String> {
         .map_err(|error| format!("读取防火墙状态任务失败：{error}"))?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn firewall_add_port_rule(
     name: String,
     port: String,
@@ -103,7 +103,7 @@ pub fn firewall_add_port_rule(
     ps(&format!("New-NetFirewallRule -DisplayName {} -Direction {direction} -Action {action} -Protocol {} -LocalPort {} -Profile {profile} | Out-Null; '已添加防火墙规则：' + {}", quote(&display), quote(&protocol), quote(&port), quote(&display)))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn firewall_set_all(enabled: bool) -> Result<String, String> {
     ps(&format!(
         "Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled {}; '已{}全部防火墙配置'",
@@ -112,7 +112,7 @@ pub fn firewall_set_all(enabled: bool) -> Result<String, String> {
     ))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn firewall_set_profile(profile: String, enabled: bool) -> Result<String, String> {
     let profile = match profile.to_ascii_lowercase().as_str() {
         "domain" => "Domain",
@@ -126,7 +126,7 @@ pub fn firewall_set_profile(profile: String, enabled: bool) -> Result<String, St
     ))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn firewall_set_rule_enabled(name: String, enabled: bool) -> Result<String, String> {
     ps(&format!(
         "Set-NetFirewallRule -DisplayName {} -Enabled {}; '规则已{}：' + {}",
@@ -137,7 +137,7 @@ pub fn firewall_set_rule_enabled(name: String, enabled: bool) -> Result<String, 
     ))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn firewall_delete_rule(name: String) -> Result<String, String> {
     ps(&format!(
         "Remove-NetFirewallRule -DisplayName {}; '规则已删除：' + {}",

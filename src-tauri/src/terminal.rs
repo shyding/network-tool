@@ -81,7 +81,7 @@ fn start_reader(app: AppHandle, session_id: String, connection: Arc<Mutex<Connec
     });
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn term_session_ssh_open(
     app: AppHandle,
     state: State<'_, TerminalState>,
@@ -122,7 +122,7 @@ pub fn term_session_ssh_open(
     Ok(json!({"session_id":sid,"target":format!("{username}@{host}:{port}")}))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn term_session_telnet_open(
     app: AppHandle,
     state: State<'_, TerminalState>,
@@ -145,7 +145,7 @@ pub fn term_session_telnet_open(
     Ok(json!({"session_id":sid,"target":format!("{host}:{port}")}))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn term_session_write(
     state: State<'_, TerminalState>,
     session_id: String,
@@ -164,7 +164,7 @@ pub fn term_session_write(
         .map_err(|e| format!("终端写入失败：{e}"))?;
     Ok(data.len())
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn term_session_close(
     state: State<'_, TerminalState>,
     session_id: String,
@@ -179,7 +179,7 @@ pub fn term_session_close(
     }
     Ok(true)
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn term_session_close_all(state: State<'_, TerminalState>) -> Result<bool, String> {
     let sessions = std::mem::take(&mut *state.sessions.lock().map_err(|_| "终端状态锁异常")?);
     for (_, conn) in sessions {

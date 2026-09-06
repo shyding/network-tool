@@ -14,7 +14,7 @@ fn endpoint(base: &str) -> String {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn ai_chat(
     api_url: String,
     api_key: String,
@@ -70,7 +70,7 @@ pub fn ai_chat(
     Ok(json!({"content":content,"usage":raw["usage"],"model":raw["model"]}))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn ai_analyze_packet_capture(
     state: tauri::State<'_, crate::capture::CaptureState>,
     api_url: String,

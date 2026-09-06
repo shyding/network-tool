@@ -276,7 +276,7 @@ fn http_snapshot(
         Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
     }
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_get_snapshot(
     host: String,
     port: u16,
@@ -341,7 +341,7 @@ pub fn camera_get_snapshot(
         ),
     }
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_start_live_stream(
     app: AppHandle,
     state: State<'_, CameraState>,
@@ -382,12 +382,12 @@ pub fn camera_start_live_stream(
     });
     Ok(json!({"running":true,"message":"正在启动实时预览"}))
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_stop_live_stream(state: State<'_, CameraState>) -> Value {
     state.streaming.store(false, Ordering::Relaxed);
     json!({"running":false,"message":"实时预览已停止"})
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_inspect_firmware(path: String) -> Result<Value, String> {
     let bytes = std::fs::read(&path).map_err(|e| format!("读取固件失败：{e}"))?;
     let hash = format!("{:x}", Sha256::digest(&bytes));
@@ -396,7 +396,7 @@ pub fn camera_inspect_firmware(path: String) -> Result<Value, String> {
         json!({"path":path,"file_name":file.file_name().and_then(|s|s.to_str()).unwrap_or("firmware"),"bytes":bytes.len(),"sha256":hash,"supported_hint":"已完成文件完整性识别；升级前必须人工核对型号和硬件版本"}),
     )
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_probe_auth(
     host: String,
     port: u16,
@@ -435,7 +435,7 @@ pub fn camera_probe_auth(
         json!({"ok":ok,"message":if ok{"设备认证成功"}else{"认证失败或设备未提供 HTTP 管理接口"},"protocol":scheme.to_uppercase(),"vendor":brand.unwrap_or_else(||"auto".into()),"base_url":base,"status_code":code}),
     )
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_get_device_info(
     host: String,
     port: u16,
@@ -586,7 +586,7 @@ fn xml(value: &str) -> String {
         .replace('\'', "&apos;")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_change_password(
     host: String,
     port: u16,
@@ -788,7 +788,7 @@ fn upgrade_one(target: &Value, firmware: &str) -> Result<u16, String> {
         .unwrap_or(0))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_start_batch_upgrade(
     app: AppHandle,
     state: State<'_, CameraState>,
@@ -840,7 +840,7 @@ pub fn camera_start_batch_upgrade(
     let _ = app.emit("camera:upgrade-complete", &result);
     Ok(result)
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn camera_stop_batch_upgrade(state: State<'_, CameraState>) -> Value {
     state.upgrade_cancel.store(true, Ordering::Relaxed);
     json!({"success":true,"message":"已请求在当前设备操作结束后停止批量升级"})

@@ -167,7 +167,7 @@ pub async fn start_health_check(app: AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_loop_detection(app: AppHandle, iface_key: Option<String>) -> Result<Value, String> {
     let selected_name = if let Some(key) = iface_key.as_deref().filter(|key|*key!="__all__") {
         crate::interfaces::all_interfaces()?.into_iter().find(|item|item["key"]==key).and_then(|item|item["name"].as_str().map(str::to_string))
@@ -204,7 +204,7 @@ pub fn start_loop_detection(app: AppHandle, iface_key: Option<String>) -> Result
     Ok(result)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_security_test(app: AppHandle) -> Result<bool, String> {
     let raw = ps_json(
         r#"$fw=@(Get-NetFirewallProfile|Where-Object{$_.Enabled}).Count;$rdp=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections;$smb=(Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction SilentlyContinue).State;$guest=(Get-LocalUser -Name Guest -ErrorAction SilentlyContinue).Enabled;$uac=(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -ErrorAction SilentlyContinue).EnableLUA;$policy=[ADSI]("WinNT://"+$env:COMPUTERNAME);$screen=Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue;$au=(Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' -ErrorAction SilentlyContinue).NoAutoUpdate;$os=Get-CimInstance Win32_OperatingSystem;$shares=@(Get-SmbShare -ErrorAction SilentlyContinue|Where-Object{$_.Special -ne $true});$ports=@(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue|Where-Object LocalPort -in @(21,23,135,139,445,3389,5900)|Select-Object -ExpandProperty LocalPort -Unique);[pscustomobject]@{firewall=($fw -eq 3);rdp_disabled=($rdp -eq 1);smb1_disabled=($smb -ne 'Enabled');guest_disabled=($guest -ne $true);uac=($uac -eq 1);pwd_length=[int]$policy.MinPasswordLength.Value;lockout=[int]$policy.MaxBadPasswordsAllowed.Value;screensaver=([string]$screen.ScreenSaveActive -eq '1' -and [string]$screen.ScreenSaverIsSecure -eq '1');screen_timeout=[int]$screen.ScreenSaveTimeOut;autoupdate=($au -ne 1);os=($os.Caption+' '+$os.Version+' Build '+$os.BuildNumber);shares=@($shares|Select-Object -ExpandProperty Name);ports=$ports}|ConvertTo-Json -Depth 4 -Compress"#,
@@ -409,7 +409,7 @@ pub fn start_security_test(app: AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_log_audit(app: AppHandle, hours: u32, max_events: u32) -> Result<bool, String> {
     let script = format!(
         r#"$start=(Get-Date).AddHours(-{});$events=@(Get-WinEvent -FilterHashtable @{{LogName='Security';StartTime=$start}} -MaxEvents {} -ErrorAction Stop);$names=@{{4624='登录成功';4625='登录失败';4634='注销';4648='显式凭据登录';4672='特殊权限登录';4688='进程创建';4719='审核策略变更';4720='创建用户';4726='删除用户';4732='加入本地组';1102='清除审核日志'}};$danger=@(1102,4720,4726,4732);$warning=@(4625,4648,4672,4719);$counts=@($events|Group-Object Id|Sort-Object Count -Descending|Select-Object -First 20|ForEach-Object{{$id=[int]$_.Name;[pscustomobject]@{{id=$id;name=if($names[$id]){{$names[$id]}}else{{'事件 '+$id}};count=[int]$_.Count;severity=if($danger -contains $id){{'danger'}}elseif($warning -contains $id){{'warning'}}else{{'safe'}}}}}});$ips=@($events|Where-Object Id -eq 4625|ForEach-Object{{try{{$xml=[xml]$_.ToXml();($xml.Event.EventData.Data|Where-Object Name -eq 'IpAddress').'#text'}}catch{{}}}}|Where-Object{{$_ -and $_ -notin @('-','127.0.0.1','::1')}}|Group-Object|Sort-Object Count -Descending|Select-Object -First 20|ForEach-Object{{[pscustomobject]@{{name=$_.Name;count=[int]$_.Count}}}});[pscustomobject]@{{total=$events.Count;success_logins=@($events|Where-Object Id -eq 4624).Count;fail_logins=@($events|Where-Object Id -eq 4625).Count;event_counts=$counts;fail_ips=$ips}}|ConvertTo-Json -Depth 5 -Compress"#,

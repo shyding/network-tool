@@ -64,7 +64,7 @@ pub async fn local_settings_snapshot() -> Result<Value, String> {
         .map_err(|error| format!("读取本机设置任务失败：{error}"))?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn local_get_ip_config(interface: String) -> Result<Value, String> {
     crate::interfaces::all_interfaces()?.into_iter().find(|item| item["name"] == interface)
         .map(|item| json!({"interface": interface, "dhcp": item["dhcp"], "ip": item["ipv4"], "mask": item["netmask"], "gateway": item["gateway"], "dns": item["dns"]}))
@@ -81,7 +81,7 @@ pub struct IpConfigRequest {
     dns: Option<String>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn local_apply_ip_config(req: IpConfigRequest) -> Result<String, String> {
     let iface = quote(&req.interface);
     if req.mode.eq_ignore_ascii_case("dhcp") {
@@ -134,7 +134,7 @@ fn mask_to_prefix(mask: &str) -> Result<u32, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn local_open_tool(tool: String) -> Result<String, String> {
     let (program, args): (&str, &[&str]) = match tool.as_str() {
         "cmd" => ("cmd.exe", &[]),
@@ -175,7 +175,7 @@ fn open_elevated(program: &str) -> Result<String, String> {
     ))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn local_run_action(action: String, arg: Option<String>) -> Result<String, String> {
     match action.as_str() {
         "flush_dns" => ps("Clear-DnsClientCache; 'DNS 缓存已清理'"),
@@ -207,7 +207,7 @@ pub fn local_run_action(action: String, arg: Option<String>) -> Result<String, S
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn local_run_repair(options: Vec<String>) -> Result<String, String> {
     let mut done = Vec::new();
     for option in options {
@@ -245,7 +245,7 @@ pub fn local_run_repair(options: Vec<String>) -> Result<String, String> {
     ))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_text_file(path: String, content: String) -> Result<bool, String> {
     std::fs::write(path, content)
         .map(|_| true)

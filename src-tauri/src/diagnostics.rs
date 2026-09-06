@@ -274,7 +274,7 @@ pub async fn tools_mtu_test(host: String) -> Result<Value, String> {
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn tools_ssl_check(host: String) -> Result<Value, String> {
     use std::os::windows::process::CommandExt;
     let safe = host.replace('\'', "''");

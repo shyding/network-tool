@@ -100,7 +100,7 @@ fn configure_filter(filter: &str) -> Result<(), String> {
     }
     Ok(())
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn capture_status(state: State<'_, CaptureState>) -> Value {
     let running = state.inner.lock().map(|s| s.running).unwrap_or(false);
     let available = Command::new("where.exe")
@@ -116,7 +116,7 @@ pub async fn list_capture_ifaces() -> Result<Value, String> {
         .await
         .map_err(|error| format!("读取抓包网卡任务失败：{error}"))?
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_packet_capture(
     state: State<'_, CaptureState>,
     device: String,
@@ -153,7 +153,7 @@ pub fn start_packet_capture(
     d.max = max_packets.clamp(10, 50_000);
     Ok(true)
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stop_packet_capture(app: AppHandle, state: State<'_, CaptureState>) -> Result<bool, String> {
     run(&["stop"])?;
     let (etl, pcap, max) = {
@@ -182,7 +182,7 @@ pub fn stop_packet_capture(app: AppHandle, state: State<'_, CaptureState>) -> Re
     d.packets = packets;
     Ok(true)
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_packet_capture(state: State<'_, CaptureState>) -> Result<bool, String> {
     let mut d = state.inner.lock().map_err(|_| "抓包状态锁异常")?;
     if d.running {
@@ -197,7 +197,7 @@ pub fn clear_packet_capture(state: State<'_, CaptureState>) -> Result<bool, Stri
     }
     Ok(true)
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_packet_capture(
     state: State<'_, CaptureState>,
     path: String,
@@ -215,7 +215,7 @@ pub fn export_packet_capture(
     }
     Ok(d.packets.len())
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_packet_capture(
     state: State<'_, CaptureState>,
     path: String,

@@ -2,8 +2,57 @@ use serde_json::{json, Value};
 use std::net::IpAddr;
 use std::os::windows::process::CommandExt as StdCommandExt;
 use std::process::Stdio;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::process::Command;
+
+const WIFI_TIMEOUT: Duration = Duration::from_secs(8);
+static WIFI_SCAN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+
+#[link(name = "kernel32")]
+extern "system" {
+    fn MultiByteToWideChar(code_page: u32, flags: u32, input: *const u8, input_len: i32, output: *mut u16, output_len: i32) -> i32;
+}
+
+fn decode_netsh_output(bytes: &[u8]) -> Result<String, String> {
+    if let Ok(text) = std::str::from_utf8(bytes) { return Ok(text.trim_start_matches('\u{feff}').into()); }
+    let length = i32::try_from(bytes.len()).map_err(|_| "netsh output is too large")?;
+    // netsh uses the Windows OEM code page when stdout is redirected.
+    let required = unsafe { MultiByteToWideChar(1, 0, bytes.as_ptr(), length, std::ptr::null_mut(), 0) };
+    if required == 0 { return Err("Unable to decode netsh output".into()); }
+    let mut wide = vec![0_u16; required as usize];
+    let written = unsafe { MultiByteToWideChar(1, 0, bytes.as_ptr(), length, wide.as_mut_ptr(), required) };
+    if written == 0 { return Err("Unable to decode netsh output".into()); }
+    Ok(String::from_utf16_lossy(&wide[..written as usize]))
+}
+
+async fn wifi_command_output(mut command: Command, wait: Duration) -> Result<std::process::Output, String> {
+    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .creation_flags(0x08000000).kill_on_drop(true);
+    tokio::time::timeout(wait, command.output()).await
+        .map_err(|_| "WiFi 查询超时，已终止查询；请检查无线网卡或 WLAN 服务后重试".to_string())?
+        .map_err(|error| format!("WiFi 查询启动失败：{error}"))
+}
+
+async fn wifi_lines(arguments: &[String]) -> Result<Vec<String>, String> {
+    let mut command = Command::new("netsh.exe");
+    command.args(arguments);
+    let output = wifi_command_output(command, WIFI_TIMEOUT).await?;
+    let text = decode_netsh_output(&output.stdout)?;
+    if !output.status.success() {
+        let error = decode_netsh_output(&output.stderr)?;
+        return Err(format!("WiFi 查询失败：{}", if text.trim().is_empty() { error.trim() } else { text.trim() }));
+    }
+    Ok(text.lines().map(str::to_string).collect())
+}
+
+fn wifi_scan_arguments(interface: Option<&str>) -> Result<Vec<String>, String> {
+    let mut arguments = vec!["wlan".into(), "show".into(), "networks".into(), "mode=bssid".into()];
+    if let Some(name) = interface.map(str::trim).filter(|name| !name.is_empty()) {
+        if name.len() > 256 || name.chars().any(char::is_control) { return Err("无线网卡名称无效".into()); }
+        arguments.push(format!("interface={name}"));
+    }
+    Ok(arguments)
+}
 
 fn netsh_lines(arguments: &str) -> Result<Vec<String>, String> {
     let script = format!(
@@ -157,19 +206,31 @@ pub async fn list_arp_table() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn scan_wifi_networks(interface: Option<String>) -> Result<Value, String> {
-    let lines = netsh_lines("wlan show networks mode=bssid")?;
+    let _permit = WIFI_SCAN.try_acquire().map_err(|_| "WiFi 扫描正在进行，请稍后重试")?;
+    let lines = wifi_lines(&wifi_scan_arguments(interface.as_deref())?).await?;
+    parse_wifi_networks(&lines)
+}
+
+fn parse_wifi_networks(lines: &[String]) -> Result<Value, String> {
     let mut aps = Vec::<Value>::new();
+    let mut interfaces = Vec::new();
+    let mut interface_name = String::new();
     let mut ssid = String::new();
     let mut auth = String::new();
     for line in lines {
         let t = line.trim();
-        if t.starts_with("SSID ") && !t.starts_with("BSSID") {
+        if t.starts_with("Interface name") || t.starts_with("接口名称") || t.starts_with("界面名称") {
+            interface_name = after_colon(t).to_string();
+            interfaces.push(json!({"name":interface_name,"kind":"wifi"}));
+            ssid.clear();
+            auth.clear();
+        } else if t.starts_with("SSID ") && !t.starts_with("BSSID") {
             ssid = after_colon(t).to_string();
             auth.clear();
         } else if t.starts_with("Authentication") || t.starts_with("身份验证") {
             auth = after_colon(t).to_string();
         } else if t.starts_with("BSSID ") {
-            aps.push(json!({"ssid":ssid,"bssid":after_colon(t),"auth":auth,"signal_percent":0,"signal_dbm":-100,"quality":"很差","channel":0,"band":"2.4G"}));
+            aps.push(json!({"ssid":ssid,"bssid":after_colon(t),"interface":interface_name,"auth":auth,"signal_percent":0,"signal_dbm":-100,"quality":"很差","channel":0,"band":"2.4G"}));
         } else if t.starts_with("Signal") || t.starts_with("信号") {
             if let Some(last) = aps.last_mut() {
                 let pct = after_colon(t)
@@ -199,6 +260,10 @@ pub async fn scan_wifi_networks(interface: Option<String>) -> Result<Value, Stri
             }
         }
     }
+    if interfaces.is_empty() && aps.is_empty() {
+        let message = lines.iter().map(|line| line.trim()).filter(|line| !line.is_empty()).take(8).collect::<Vec<_>>().join("\n");
+        return Err(if message.is_empty() { "WiFi 查询未返回数据".into() } else { message });
+    }
     let mut weights = std::collections::BTreeMap::<u64, u64>::new();
     for ap in &aps {
         let c = ap["channel"].as_u64().unwrap_or(0);
@@ -209,15 +274,6 @@ pub async fn scan_wifi_networks(interface: Option<String>) -> Result<Value, Stri
         .map(|channel| (channel, *weights.get(&channel).unwrap_or(&0)))
         .collect::<Vec<_>>();
     candidates.sort_by_key(|v| v.1);
-    let interfaces = crate::interfaces::all_interfaces()?
-        .into_iter()
-        .filter(|item| item["kind"] == "wifi")
-        .filter(|item| {
-            interface
-                .as_deref()
-                .is_none_or(|wanted| item["name"] == wanted)
-        })
-        .collect::<Vec<_>>();
     Ok(
         json!({"interfaces":interfaces,"aps":aps,"channel_stats":channel_stats,"recommend_24g":candidates.into_iter().take(3).map(|v|v.0).collect::<Vec<_>>(),"message":format!("扫描完成，发现 {} 个接入点",aps.len())}),
     )
@@ -225,14 +281,23 @@ pub async fn scan_wifi_networks(interface: Option<String>) -> Result<Value, Stri
 
 #[tauri::command]
 pub async fn list_wifi_interfaces() -> Result<Value, String> {
-    tokio::task::spawn_blocking(|| {
-        Ok(Value::Array(crate::interfaces::all_interfaces()?
-            .into_iter()
-            .filter(|item| item["kind"] == "wifi")
-            .collect()))
-    })
-    .await
-    .map_err(|error| format!("读取 WiFi 网卡任务失败：{error}"))?
+    let lines = wifi_lines(&["wlan".into(), "show".into(), "interfaces".into()]).await?;
+    Ok(json!(parse_wifi_interfaces(&lines)))
+}
+
+fn parse_wifi_interfaces(lines: &[String]) -> Vec<Value> {
+    let mut interfaces = Vec::<Value>::new();
+    for line in lines {
+        let Some((key, value)) = line.trim().split_once(':') else { continue; };
+        let value = value.trim();
+        match key.trim() {
+            "Name" | "名称" | "名字" => interfaces.push(json!({"name":value,"kind":"wifi","ssid":""})),
+            "Description" | "描述" => { if let Some(item) = interfaces.last_mut() { item["description"] = json!(value); } }
+            "SSID" => { if let Some(item) = interfaces.last_mut() { item["ssid"] = json!(value); } }
+            _ => {}
+        }
+    }
+    interfaces
 }
 
 fn list_wifi_passwords_blocking() -> Result<Value, String> {
@@ -288,4 +353,58 @@ pub async fn list_wifi_passwords() -> Result<Value, String> {
     tokio::task::spawn_blocking(list_wifi_passwords_blocking)
         .await
         .map_err(|error| format!("读取 WiFi 配置任务失败：{error}"))?
+}
+
+#[cfg(test)]
+mod wifi_tests {
+    use super::*;
+
+    fn lines(text: &str) -> Vec<String> { text.lines().map(str::to_string).collect() }
+
+    #[test]
+    fn interfaces_include_disconnected_adapters_without_ip_queries() {
+        let result = parse_wifi_interfaces(&lines("Name : Wi-Fi\nDescription : Adapter A\nState : disconnected\n名称 : 无线网络\n描述 : Adapter B\nSSID : Network B"));
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0]["name"], "Wi-Fi");
+        assert_eq!(result[0]["ssid"], "");
+        assert_eq!(result[1]["name"], "无线网络");
+        assert_eq!(result[1]["ssid"], "Network B");
+        assert!(parse_wifi_interfaces(&lines("There is no wireless interface on the system.")).is_empty());
+    }
+
+    #[test]
+    fn scan_parser_handles_localized_output_and_no_networks() {
+        let parsed = parse_wifi_networks(&lines("接口名称 : 无线网络\nSSID 1 : Test\n身份验证 : WPA2\nBSSID 1 : 00:11:22:33:44:55\n信号 : 80%\n信道 : 6")).unwrap();
+        assert_eq!(parsed["interfaces"][0]["name"], "无线网络");
+        assert_eq!(parsed["aps"][0]["interface"], "无线网络");
+        assert_eq!(parsed["aps"][0]["signal_dbm"], -60);
+        assert_eq!(parsed["aps"][0]["channel"], 6);
+        let empty = parse_wifi_networks(&lines("Interface name : Wi-Fi\nThere are 0 networks currently visible.")).unwrap();
+        assert_eq!(empty["aps"], json!([]));
+        assert!(parse_wifi_networks(&lines("Access is denied. Enable location permission.")).unwrap_err().contains("Access is denied"));
+    }
+
+    #[test]
+    fn interface_argument_is_literal_and_control_characters_are_rejected() {
+        let arguments = wifi_scan_arguments(Some("Wi-Fi $(test) & name")).unwrap();
+        assert_eq!(arguments, vec!["wlan", "show", "networks", "mode=bssid", "interface=Wi-Fi $(test) & name"]);
+        assert_eq!(wifi_scan_arguments(None).unwrap().len(), 4);
+        assert!(wifi_scan_arguments(Some("Wi-Fi\nsecond command")).is_err());
+        assert_eq!(decode_netsh_output("SSID : 无线网络".as_bytes()).unwrap(), "SSID : 无线网络");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hanging_wifi_command_times_out_without_blocking_the_runtime() {
+        let mut command = Command::new("powershell.exe");
+        command.args(["-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 30"]);
+        let started = Instant::now();
+        let operation = wifi_command_output(command, Duration::from_millis(500));
+        let heartbeat = async {
+            tokio::time::sleep(Duration::from_millis(40)).await;
+            assert!(started.elapsed() < Duration::from_millis(400));
+        };
+        let (result, _) = tokio::join!(operation, heartbeat);
+        assert!(result.unwrap_err().contains("超时"));
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
 }

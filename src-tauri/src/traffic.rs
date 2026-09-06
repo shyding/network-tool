@@ -34,13 +34,13 @@ fn counters() -> Result<HashMap<String, (u64, u64)>, String> {
         .collect())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reset_traffic_baseline(state: State<'_, TrafficState>) -> Result<bool, String> {
     *state.baseline.lock().map_err(|_| "流量状态锁异常")? = Some((Instant::now(), counters()?));
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sample_traffic(
     state: State<'_, TrafficState>,
     iface: Option<String>,

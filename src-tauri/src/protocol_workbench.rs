@@ -524,7 +524,7 @@ pub async fn protocol_tcp_exchange(req: RawExchangeRequest) -> Result<Value, Str
         .map_err(|error| format!("TCP 调试任务失败：{error}"))?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_tcp_client_connect(app: AppHandle, state: State<'_, ProtocolClientState>, req: TcpClientConnectRequest) -> Result<Value, String> {
     let wait = timeout(req.timeout_ms);
     let peer = resolve(&req.host, req.port)?;
@@ -566,7 +566,7 @@ pub fn protocol_tcp_client_connect(app: AppHandle, state: State<'_, ProtocolClie
     Ok(json!({"ok":true,"connected":true,"peer":peer_text,"elapsed_ms":started.elapsed().as_millis()}))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_tcp_client_send(state: State<'_, ProtocolClientState>, req: TcpClientSendRequest) -> Result<Value, String> {
     let text_encoding = req.text_encoding.clone().unwrap_or_else(|| "utf-8".into());
     let payload = decode_payload_advanced(&req.payload, req.input_mode.as_deref(), req.text_encoding.as_deref(), req.parse_escapes.unwrap_or(false), req.line_ending.as_deref(), req.custom_suffix_hex.as_deref(), req.encoding.as_deref())?;
@@ -582,7 +582,7 @@ pub fn protocol_tcp_client_send(state: State<'_, ProtocolClientState>, req: TcpC
     Ok(exchange_result(&payload, &[], started.elapsed(), session.peer.clone(), &text_encoding))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_tcp_client_disconnect(state: State<'_, ProtocolClientState>) -> Result<bool, String> {
     if let Some(session) = state.session.lock().map_err(|_| "TCP Client 状态锁异常")?.take() {
         session.connected.store(false, Ordering::Relaxed);
@@ -591,7 +591,7 @@ pub fn protocol_tcp_client_disconnect(state: State<'_, ProtocolClientState>) -> 
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_tcp_client_status(state: State<'_, ProtocolClientState>) -> Result<Value, String> {
     let session = state.session.lock().map_err(|_| "TCP Client 状态锁异常")?;
     Ok(match session.as_ref() {
@@ -984,7 +984,7 @@ fn insert_server(state: &ProtocolServerState, kind: &str, address: String, runni
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_server_start(app: AppHandle, state: State<'_, ProtocolServerState>, req: ProtocolServerRequest) -> Result<bool, String> {
     let kind = req.kind.to_ascii_lowercase();
     if !matches!(kind.as_str(), "tcp" | "udp" | "modbus_tcp" | "modbus_udp" | "modbus_rtu") { return Err("未知服务类型".into()); }
@@ -1147,7 +1147,7 @@ pub fn protocol_server_start(app: AppHandle, state: State<'_, ProtocolServerStat
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_server_stop(state: State<'_, ProtocolServerState>, kind: String) -> Result<bool, String> {
     if let Some(server) = state.servers.lock().map_err(|_| "协议服务状态锁异常")?.remove(&kind) {
         server.running.store(false, Ordering::Relaxed);
@@ -1156,7 +1156,7 @@ pub fn protocol_server_stop(state: State<'_, ProtocolServerState>, kind: String)
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_server_stop_all(state: State<'_, ProtocolServerState>) -> Result<bool, String> {
     let mut servers = state.servers.lock().map_err(|_| "协议服务状态锁异常")?;
     for server in servers.values() {
@@ -1167,7 +1167,7 @@ pub fn protocol_server_stop_all(state: State<'_, ProtocolServerState>) -> Result
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_server_status(state: State<'_, ProtocolServerState>) -> Result<Value, String> {
     let servers = state.servers.lock().map_err(|_| "协议服务状态锁异常")?;
     Ok(json!({"servers":servers.iter().map(|(kind,server)|json!({
@@ -1189,7 +1189,7 @@ pub fn protocol_server_status(state: State<'_, ProtocolServerState>) -> Result<V
     })).collect::<Vec<_>>() }))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_server_send(state: State<'_, ProtocolServerState>, req: ProtocolServerSendRequest) -> Result<Value, String> {
     let text_encoding = req.text_encoding.clone().unwrap_or_else(|| "utf-8".into());
     let payload = decode_payload_advanced(&req.payload, req.input_mode.as_deref(), req.text_encoding.as_deref(), req.parse_escapes.unwrap_or(false), req.line_ending.as_deref(), req.custom_suffix_hex.as_deref(), req.encoding.as_deref())?;
@@ -1240,7 +1240,7 @@ pub fn protocol_server_send(state: State<'_, ProtocolServerState>, req: Protocol
     }))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_server_set_memory(state: State<'_, ProtocolServerState>, req: ModbusMemoryRequest) -> Result<Value, String> {
     let mut memory = state.memory.lock().map_err(|_| "Modbus 内存锁异常")?;
     let start = req.address as usize;
@@ -1255,7 +1255,7 @@ pub fn protocol_server_set_memory(state: State<'_, ProtocolServerState>, req: Mo
     Ok(json!({"ok":true,"area":req.area,"address":req.address,"count":req.values.len()}))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocol_server_get_memory(state: State<'_, ProtocolServerState>, area: String, address: u16, quantity: u16) -> Result<Value, String> {
     let memory = state.memory.lock().map_err(|_| "Modbus 内存锁异常")?;
     let start = address as usize; let count = quantity.clamp(1, 256) as usize;

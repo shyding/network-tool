@@ -13,7 +13,7 @@ pub struct SerialState {
     running: Arc<AtomicBool>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn serial_list_ports() -> Result<Value, String> {
     let ports = serialport::available_ports().map_err(|e| format!("枚举串口失败：{e}"))?;
     Ok(json!(ports
@@ -35,7 +35,7 @@ pub fn serial_list_ports() -> Result<Value, String> {
         .collect::<Vec<_>>()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn serial_open(
     app: AppHandle,
     state: State<'_, SerialState>,
@@ -95,7 +95,7 @@ pub fn serial_open(
     Ok(true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn serial_write(state: State<'_, SerialState>, data: String) -> Result<usize, String> {
     let mut guard = state.port.lock().map_err(|_| "串口状态锁异常")?;
     let port = guard.as_mut().ok_or("串口尚未打开")?;
@@ -105,7 +105,7 @@ pub fn serial_write(state: State<'_, SerialState>, data: String) -> Result<usize
     Ok(data.len())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn serial_close(state: State<'_, SerialState>) -> Result<bool, String> {
     state.running.store(false, Ordering::Relaxed);
     state.port.lock().map_err(|_| "串口状态锁异常")?.take();
